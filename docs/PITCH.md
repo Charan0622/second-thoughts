@@ -5,7 +5,7 @@
 **1 · The problem: "add to cart" is a one-person decision**
 - Impulse buys happen in seconds. The facts that should stop you are spread across a bank statement, a savings sheet, old receipts and rules you set for yourself.
 - Big line: *"Your future selves weigh in before you pay."*
-- Visual: the four Firefly avatars around a price tag.
+- Visual: the four selves around a price tag.
 
 **2 · Live demo (switch to the app)**
 1. Shoes, $109.95 → **Buy** (4/4 agree, ~0.4 s)
@@ -22,9 +22,9 @@
   - Veto at p ≥ 0.93 · log-odds pooling · negotiation where every self scores every trade-off
 
 **4 · Numbers**
-- Benchmark table (40 labelled scenarios, 4 methods). Headline: **the council agrees with the human labels 90% of the time (36/40). A single Drex call gets 40% and a single Qwen3.8-Max call 32%, because both say "wait" to almost everything. A Qwen council with the same structure gets 42%.** Zero critical errors.
+- Benchmark table: use the hold-out numbers from backend/bench/RESULTS.md (blind-labelled cards, CIs, plain-rules floor). Say what it does and doesn't show.
 - Latency: council ~0.4–0.7 s vs ~2 s for the frontier LLM. Cost: ~$0.0006 per verdict (vs $0.0024 for the Qwen council).
-- Honesty note: v1 scored 70%. We then fixed 2 bugs and made one change (Deal You judges savings in dollars) and reran every method.
+- Honesty slide: our own review tore the first benchmark apart; show what we changed.
 
 **5 · Tool usage**
 - Ledger screenshot plus a tally table:
@@ -33,7 +33,6 @@
   - **Intern:** Clerk at setup and for explanations; also the coding spec in AGENTS.md
   - **Keenable:** live prices
   - **DeepInfra:** spoken sentence and benchmark baseline
-  - **Adobe:** Firefly avatars and Express slides
 - Closing line: *"Every vote cites a line from your own documents. That's what makes a second thought something you can trust."*
 
 ## 60–90 s demo video script
