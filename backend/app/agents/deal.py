@@ -37,7 +37,8 @@ def web_facts(item: Item, snaps: list[dict]) -> tuple[list[Fact], list[str]]:
             label = "Live web · Keenable" + (" (cached)" if s.get("cached") else "")
             fs.append(Fact(id=f"deal_{si}_{ri}", agent="deal", text=f"{r['host'] or 'web'}: {r['title']}",
                            doc=r["url"] or r["host"], doc_label=label, quote=(r["snippet"] or r["title"])[:220]))
-    computed = [f"Black Friday is {BLACK_FRIDAY} — 13 days away — and is also Maya's next payday."]
+    computed = [f"Black Friday is {BLACK_FRIDAY} — 13 days away — and is also Maya's next payday.",
+                f"Even a generous 20% discount would save only about ${0.2 * item.price:,.0f} on this item."]
     if prices:
         lo = typical_low(prices)
         computed.append(f"Prices seen on the live web: {len(prices)} mentions; typical low (25th percentile) ${lo:,.2f}. "
@@ -61,8 +62,8 @@ async def vote(item: Item, snaps: list[dict], extra: str | None = None) -> Vote:
                         computed, item)
     answers, res = await ask_council_member(
         agent="deal", label=LABEL, state=state, facts=fs,
-        regret_true="A price at least 15% lower is clearly available right now, or Black Friday is likely to cut this exact item by 15% or more",
-        regret_false="The asking price is at or near the lowest price seen, so waiting is unlikely to save 15% or more",
+        regret_true="Waiting or shopping elsewhere would likely save at least 15% AND at least $25 on this exact item",
+        regret_false="The price is near the typical low, or the possible saving is small in dollars (under $25)",
         extra_q={"wait_wins": drex.noul("Would waiting until Black Friday likely save Maya meaningful money on this item?")})
     cit, cp = pick_citation(answers, fs)
     prices = [p for s in snaps for p in (s.get("prices") or [])]

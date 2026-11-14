@@ -47,10 +47,12 @@ def offers(item: Item) -> list[Offer]:
         Offer("wait_24h", "Sleep on it — decide in 24 hours", None,
               "Maya commits to waiting 24 hours and buying only if she still wants it."),
     ]
-    if item.category == "running_gear" or over_rule == 0:
-        out = [o for o in out if o.id != "top_up_japan"]
-    if item.category not in ("headphones",):
-        out = [o for o in out if o.id not in ("resell_earbuds", "resell_and_topup")]
-    if over_rule == 0:
-        out = [o for o in out if o.id != "resell_and_topup"]
+    breaks_rule = bool(p.rules) and item.category in ("headphones", "computer", "gadget") and over_rule > 0
+    owns_similar = bool(p.owned_item) and item.category == "headphones"
+    drop = set()
+    if not breaks_rule:
+        drop |= {"top_up_japan", "resell_and_topup"}
+    if not owns_similar:
+        drop |= {"resell_earbuds", "resell_and_topup"}
+    out = [o for o in out if o.id not in drop]
     return out

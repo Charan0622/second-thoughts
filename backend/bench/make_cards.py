@@ -40,6 +40,11 @@ ITEMS = [
 ]
 
 
+# Human overrides after spot-check (card id → (label, reason)).
+OVERRIDES = {"maya-01": ("buy_with_condition", "human override: affordable ($76 left); rule + duplicate concerns are "
+                                                 "resolvable by reselling the earbuds and topping up the Japan fund")}
+
+
 def label(v: dict, cat: str, price: float) -> tuple[str, str]:
     free = v["balance"] - SCHEDULED
     if price > free:
@@ -64,6 +69,7 @@ if __name__ == "__main__":
         for vid, v in VARIANTS.items():
             for name, cat, price in ITEMS:
                 lab, why = label(v, cat, price)
+                lab, why = OVERRIDES.get(f"{vid}-{n:02d}", (lab, why))
                 f.write(json.dumps({"id": f"{vid}-{n:02d}", "variant": vid, "variant_desc": v["desc"], "balance": v["balance"],
                                     "rules": v["rules"], "owns_earbuds": v["owns_earbuds"], "item": name, "category": cat,
                                     "price": price, "label": lab, "label_reason": why}) + "\n")
