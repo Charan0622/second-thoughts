@@ -2,6 +2,7 @@
 // "mine": only your files are used, and a slot you skip is treated as unknown (never the demo persona's data).
 // Each upload goes to the backend, NDI extracts it right away. Files stay on this machine (data/private/my_docs).
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { PersonaMode } from './api'
 
 interface Slot { label: string; owner: 'yours' | 'demo' | 'missing'; files: string[]; errors: string[] }
@@ -26,10 +27,10 @@ const CSS = `
   border: 1px solid var(--hair-2); background: transparent; color: var(--ink-2); white-space: nowrap; }
 .dcp-btn:hover { border-color: var(--ink); color: var(--ink); }
 .dcp-btn.is-mine { border-color: var(--buy); color: var(--buy); }
-.dcp-scrim { position: fixed; inset: 0; z-index: 60; background: rgba(22, 20, 15, 0.55); display: grid; place-items: center; padding: var(--gutter); }
-.dcp-card { background: var(--paper); color: var(--ink); border-radius: 10px; padding: var(--s5); width: min(620px, 100%);
-  max-height: 90vh; overflow: auto; display: grid; gap: var(--s3); box-shadow: 0 20px 60px rgba(0,0,0,.35); font-family: var(--sans); }
-.dcp-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); }
+.dcp-scrim { position: fixed; inset: 0; z-index: 1000; background: rgba(22, 20, 15, 0.55); display: grid; place-items: center; padding: var(--gutter); }
+.dcp-card { background: var(--ivory, #f4efe4); color: var(--ink); border-radius: 10px; padding: var(--s5, 30px); width: min(620px, 100%);
+  max-height: 90vh; overflow: auto; display: grid; gap: var(--s3, 18px); box-shadow: 0 20px 60px rgba(0,0,0,.35); font-family: var(--sans); }
+.dcp-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3, 18px); }
 .dcp-title { font: 400 1.5rem/1.1 var(--serif); }
 .dcp-x { background: none; border: 0; font-size: 1.3rem; line-height: 1; color: var(--ink-2); padding: 4px; }
 .dcp-sub { font-size: 0.85rem; color: var(--ink-2); margin: 0; }
@@ -39,11 +40,11 @@ const CSS = `
 .dcp-tag.yours { border-color: var(--buy); color: var(--buy); }
 .dcp-files { grid-column: 1 / -1; font: 0.78rem/1.3 var(--mono, monospace); color: var(--ink-2); word-break: break-all; }
 .dcp-hint { font-size: 0.8rem; color: var(--ink-2); }
-.dcp-up { font: 500 0.78rem/1 var(--sans); padding: 7px 12px; border-radius: 6px; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); cursor: pointer; }
+.dcp-up { font: 500 0.78rem/1 var(--sans); padding: 7px 12px; border-radius: 6px; border: 1px solid var(--ink); background: var(--ink); color: var(--ivory, #f4efe4); cursor: pointer; }
 .dcp-up input { display: none; }
 .dcp-flags { margin: 0; padding: 10px 12px; border-radius: 6px; background: rgba(200,140,0,.12); font-size: 0.82rem; list-style: none; display: grid; gap: 4px; }
 .dcp-err { color: var(--wait); font-size: 0.8rem; grid-column: 1 / -1; }
-.dcp-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); font-size: 0.8rem; color: var(--ink-2); }
+.dcp-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--s3, 18px); font-size: 0.8rem; color: var(--ink-2); }
 .dcp-reset { background: none; border: 1px solid var(--hair-2); border-radius: 6px; padding: 6px 10px; font: inherit; color: var(--ink-2); cursor: pointer; }
 .dcp-busy { font-size: 0.85rem; }
 `
@@ -104,7 +105,7 @@ export default function DocsPanel({ onChange, openSignal = 0 }: Props) {
       <button type="button" className={`dcp-btn${mine ? ' is-mine' : ''}`} onClick={() => setOpen(true)}>
         📄 {mine ? 'Your documents' : 'Use my documents'}
       </button>
-      {open && (
+      {open && createPortal(
         <div className="dcp-scrim" role="dialog" aria-modal="true" aria-label="Your documents" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false) }}>
           <div className="dcp-card">
             <div className="dcp-head">
@@ -144,7 +145,8 @@ export default function DocsPanel({ onChange, openSignal = 0 }: Props) {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )

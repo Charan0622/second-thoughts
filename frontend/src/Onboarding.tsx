@@ -11,7 +11,7 @@ const CSS = `
 .onb-title { font: 400 1.6rem/1.15 var(--serif); margin: 0; }
 .onb-sub { margin: 0; color: var(--ink-2); font-size: 0.92rem; }
 .onb-list { margin: 0; padding: 0; list-style: none; color: var(--ink-3); font-size: 0.8rem; }
-.onb-actions { display: flex; flex-direction: column; align-items: center; gap: var(--s3); }
+.onb-actions { display: flex; flex-direction: column; align-items: center; gap: var(--s3, 18px); }
 `
 
 export default function Onboarding({ onUpload, onDemo, busy }: Props) {
