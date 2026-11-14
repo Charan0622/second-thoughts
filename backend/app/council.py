@@ -196,7 +196,10 @@ async def perceive(req: dict) -> dict:
         except Exception:  # noqa: BLE001
             return {}
 
-    look_a, tag, seen = await asyncio.gather(look(), read_tag(), vision.read_tag(data_url))  # vision never raises
+    async def nothing():
+        return {}
+    # Demo frames have a known price, so skip the ~4 s vision read; live photos use all three readers in parallel.
+    look_a, tag, seen = await asyncio.gather(look(), read_tag(), nothing() if demo else vision.read_tag(data_url))
     if look_a is None:
         cat, cat_p, bucket, present, tag_vis = (demo or {}).get("category", "other"), 0.0, "none", 1.0, 0.0
     else:
