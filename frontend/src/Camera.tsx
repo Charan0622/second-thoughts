@@ -135,7 +135,7 @@ export default function Camera(p: Props) {
   const name = p.perceive?.item_name ?? (p.demoMode ? item?.name : undefined)
   const price = p.perceive ? p.perceive.price : p.demoMode ? item?.price ?? null : null
 
-  const label = p.busy ? 'Your selves are weighing in' : p.resolved ? 'Ask again' : p.demoMode ? 'Ask my selves' : 'Capture & ask my selves'
+  const label = p.busy ? 'Your selves are weighing in' : p.resolved ? 'Ask again' : p.demoMode ? 'Ask my selves' : 'Capture — no second thoughts'
 
   return (
     <section className="desire" aria-label="The item you want">
