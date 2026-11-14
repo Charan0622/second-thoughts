@@ -1,0 +1,67 @@
+/* Two Futures: a cinematic diptych after the verdict. Uses the app's tokens (index.css). */
+.futures { position: relative; z-index: 16; background: var(--night); color: var(--on-night); border-top: 1px solid var(--night-hair); }
+.futures-inner { max-width: 1680px; margin: 0 auto; padding: var(--s7) var(--gutter) var(--s7); display: grid; gap: var(--s6); }
+
+.futures-head { display: grid; gap: var(--s4); }
+.futures-head h2 { font: 400 clamp(2.8rem, 8.5vw, 6rem)/0.9 var(--serif); letter-spacing: -0.035em; text-wrap: balance; }
+.futures-head h2 em { font-style: italic; color: var(--on-night-2); }
+.futures-says { font: 400 clamp(1.05rem, 1.6vw, 1.3rem)/1.4 var(--sans); color: var(--on-night-2); max-width: 46ch; }
+.futures-says b { color: var(--on-night); font-weight: 500; }
+
+.diptych { display: grid; gap: var(--s3); }
+.future {
+  position: relative; display: block; overflow: hidden; padding: 0; border: 0; border-radius: 4px;
+  background: var(--night-2); color: var(--on-night); text-align: left; aspect-ratio: 4 / 5; min-width: 0;
+  transition: flex-grow 0.9s var(--ease), opacity 0.6s var(--ease);
+}
+.future img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  filter: saturate(0.45) brightness(0.72); transform: scale(1.04);
+  transition: filter 0.9s var(--ease), transform 1.4s var(--ease);
+}
+.future.is-active img { filter: none; transform: scale(1); }
+/* a scrim only where the caption sits, so the words stay readable on any artwork */
+.future::after { content: ''; position: absolute; inset: 45% 0 0; background: linear-gradient(to bottom, transparent, rgba(25, 23, 20, 0.86)); pointer-events: none; }
+.future.is-missing::after { display: none; }
+.future:focus-visible { outline: 2px solid var(--on-night); outline-offset: 3px; }
+
+.future-caption { position: absolute; z-index: 1; left: var(--s5); right: var(--s5); bottom: var(--s5); display: grid; gap: var(--s2); }
+.future-title { font: 400 clamp(2rem, 4.4vw, 3.6rem)/0.95 var(--serif); letter-spacing: -0.02em; }
+.future-wait .future-title { font-style: italic; }
+.future-mark {
+  justify-self: start; font: 500 0.74rem/1.3 var(--sans); letter-spacing: 0.1em; text-transform: uppercase;
+  padding-top: var(--s2); border-top: 2px solid var(--cond-n); color: var(--on-night);
+}
+.future-buy.is-chosen .future-mark { border-top-color: var(--buy-n); }
+.future-wait.is-chosen .future-mark { border-top-color: var(--wait-n); }
+/* the reveal: the council's line draws across the chosen future */
+.future.is-chosen::before {
+  content: ''; position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 3px; background: var(--on-night);
+  transform-origin: left; animation: futures-line 1.2s var(--ease) 0.3s backwards;
+}
+@keyframes futures-line { from { transform: scaleX(0); } }
+.future:not(.is-chosen):not(.is-active) { opacity: 0.78; }
+
+/* no artwork: an honest typographic panel, never a stand-in picture */
+.future.is-missing { aspect-ratio: auto; min-height: 220px; box-shadow: inset 0 0 0 1px var(--night-hair); }
+
+.futures-foot { display: grid; gap: var(--s2); }
+.futures-note { font: italic 400 1.15rem/1.35 var(--serif); color: var(--on-night); max-width: 52ch; }
+.futures-credit { font: 400 0.8rem/1.5 var(--sans); color: var(--on-night-2); max-width: 70ch; }
+
+@media (min-width: 760px) {
+  .futures-head { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: end; column-gap: var(--s8); }
+  .diptych { display: flex; height: clamp(420px, 68svh, 760px); }
+  .future { aspect-ratio: auto; flex: 1 1 0; height: 100%; }
+  .future.is-active { flex-grow: 1.55; }
+  .future.is-missing { min-height: 0; }
+}
+
+html.still .future::before { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .future img { transform: none; }
+  .future.is-chosen::before { animation: none; }
+}
+
+/* both artworks missing: a compact typographic pair instead of two tall empty frames */
+@media (min-width: 760px) { .diptych:not(:has(img)) { height: 240px; } }

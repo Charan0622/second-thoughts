@@ -66,6 +66,7 @@ export function Clarity({ state, onBack, onAgain }: { state: RunState; onBack: (
         </p>
 
         <div className="clarity-actions">
+          <button className="cta-quiet on-dark" onClick={() => { onBack(); setTimeout(() => document.getElementById('two-futures')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }), 60) }}>See the two futures</button>
           <button className="cta-quiet on-dark" onClick={onBack}>See how they decided</button>
           <button className="cta-quiet on-dark" onClick={onAgain}>Ask about something else</button>
         </div>
