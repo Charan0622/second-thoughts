@@ -15,6 +15,8 @@ export const CLARITY: Record<Band, { big: string; small?: string }> = {
 
 /* ---------- Act V · Clarity: the verdict takes over the stage ---------- */
 
+const say = (s: string) => (s === 'buy' ? 'Buy' : s === 'abstain' ? 'Abstains' : 'Wait')
+
 export function Clarity({ state, onBack, onAgain }: { state: RunState; onBack: () => void; onAgain: () => void }) {
   const v = state.verdict!
   const c = CLARITY[v.band]
@@ -39,6 +41,24 @@ export function Clarity({ state, onBack, onAgain }: { state: RunState; onBack: (
           <div><dd>{v.price_terms.japan_slip_days}<small>d</small></dd><dt>{v.price_terms.goal_name ?? 'Japan'} slips</dt></div>
           <div><dd>{v.price_terms.pct_free_cash}<small>%</small></dd><dt>of free cash before payday</dt></div>
         </dl>
+
+        {/* The decision ledger: each self's journey and the fact it stood on. */}
+        <ol className="clarity-ledger enter" style={{ animationDelay: '650ms' }} aria-label="How each self decided">
+          {AGENTS.filter((a) => state.votes[a]).map((a) => {
+            const pos = positionOf(state, a)
+            const v = state.votes[a]!
+            return (
+              <li key={a} style={{ ['--a' as string]: `var(--${a})` }}>
+                <span className="l-who"><span className={`mark mark-${a}`} aria-hidden />{AGENT_META[a].label}</span>
+                <span className="l-path">
+                  {pos.moved && pos.first && <><s>{say(pos.first)}</s><span aria-hidden> → </span></>}
+                  {pos.now && <b className={`l-${pos.now}`}>{say(pos.now)}</b>}
+                </span>
+                <span className="l-fact">{v.headline}</span>
+              </li>
+            )
+          })}
+        </ol>
 
         <p className="clarity-why enter" style={{ animationDelay: '750ms' }}>
           {state.sentence ? <>“{state.sentence.text}”<span>{state.sentence.source === 'deepinfra' ? 'DeepInfra' : 'template'}</span></>
