@@ -43,9 +43,27 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http
                    allow_methods=["*"], allow_headers=["*"])
 
 
+TUNNEL_HEADERS = ("cf-connecting-ip", "cf-ray", "x-forwarded-for", "x-forwarded-host")
+PHONE_ONLY = ("/phone", "/api/phone/frame")
+
+
+def _via_tunnel(request: Request) -> bool:
+    return any(h in request.headers for h in TUNNEL_HEADERS)
+
+
 def _local_only(request: Request) -> None:
-    if (request.client.host if request.client else "") not in ("127.0.0.1", "::1", "localhost"):
+    if _via_tunnel(request) or (request.client.host if request.client else "") not in ("127.0.0.1", "::1", "localhost"):
         raise HTTPException(403, "admin endpoint: localhost only")
+
+
+@app.middleware("http")
+async def tunnel_guard(request: Request, call_next):
+    """Through the public phone tunnel, ONLY the phone page and photo upload are reachable — never documents,
+    persona data, crops or anything that spends API credit."""
+    if _via_tunnel(request) and request.url.path not in PHONE_ONLY:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "not available through the phone link"}, status_code=403)
+    return await call_next(request)
 app.mount("/files/demo_frames", StaticFiles(directory=FRAMES), name="frames")
 app.mount("/files/crops", StaticFiles(directory=CROPS), name="crops")
 

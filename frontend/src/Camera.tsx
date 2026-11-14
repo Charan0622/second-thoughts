@@ -66,6 +66,9 @@ const money = (n: number) => {
 export default function Camera(p: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [camError, setCamError] = useState<string | null>(null)
+  // Camera picker: lets an iPhone (macOS Continuity Camera) or any USB/virtual camera be the eye.
+  const [cams, setCams] = useState<MediaDeviceInfo[]>([])
+  const [camId, setCamId] = useState<string>(() => { try { return localStorage.getItem('st-cam') ?? '' } catch { return '' } })
   const [still, setStill] = useState<string | null>(null)
 
   useEffect(() => {
@@ -73,15 +76,21 @@ export default function Camera(p: Props) {
     let stream: MediaStream | null = null
     let cancelled = false
     setCamError(null)
-    navigator.mediaDevices?.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
-      .then((s) => {
+    navigator.mediaDevices?.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, ...(camId ? { deviceId: { exact: camId } } : {}) }, audio: false })
+      .then(async (s) => {
         if (cancelled) { s.getTracks().forEach((t) => t.stop()); return }
         stream = s
+        try {
+          const list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput')
+          setCams(list)
+          const iphone = list.find((d) => /iphone|continuity/i.test(d.label))
+          if (!camId && iphone && iphone.deviceId !== s.getVideoTracks()[0]?.getSettings().deviceId) { setCamId(iphone.deviceId); return }
+        } catch { /* labels unavailable */ }
         if (videoRef.current) { videoRef.current.srcObject = s; void videoRef.current.play() }
       })
       .catch((e: unknown) => setCamError(e instanceof Error ? e.message : 'Camera unavailable'))
     return () => { cancelled = true; stream?.getTracks().forEach((t) => t.stop()) }
-  }, [p.demoMode])
+  }, [p.demoMode, camId])
 
   const { captureRef, onCapture } = p
   useEffect(() => {
@@ -176,6 +185,15 @@ export default function Camera(p: Props) {
             ))}
           </div>
         ) : null}
+        {!p.demoMode && cams.length > 1 && (
+          <label className="override cam-pick">
+            <span>Camera</span>
+            <select value={camId} onChange={(e) => { setCamId(e.target.value); try { localStorage.setItem('st-cam', e.target.value) } catch { /* ignore */ } }}>
+              <option value="">Default</option>
+              {cams.map((c, i) => <option key={c.deviceId || i} value={c.deviceId}>{c.label || `Camera ${i + 1}`}</option>)}
+            </select>
+          </label>
+        )}
         <div className="pick-row">
           {p.examples ? (
             <button className="link" onClick={() => { p.setDemoMode(!p.demoMode); setStill(null) }} disabled={p.busy}>
