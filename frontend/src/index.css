@@ -88,37 +88,10 @@ kbd { font: 500 0.72rem var(--mono); border: 1px solid var(--hair-2); border-rad
 .cta-quiet small { font: 400 0.72rem var(--mono); opacity: 0.7; }
 .cta-quiet.on-dark { border-color: var(--night-hair); color: var(--on-night); }
 
-/* ============ ACT 0 · LANDING ============ */
-.landing { min-height: 100svh; display: flex; flex-direction: column; padding: var(--s4) var(--gutter) var(--s7); overflow: hidden; }
-.landing-mast { display: flex; justify-content: space-between; align-items: center; }
-.landing-stage { flex: 1; display: grid; gap: var(--s6); align-content: center; padding-top: var(--s6); position: relative; }
-.landing-title { font: 400 clamp(3.6rem, 15vw, 10.5rem)/0.86 var(--serif); letter-spacing: -0.035em; }
-.landing-title em { font-style: italic; color: var(--ink-2); }
-.specimen { position: relative; width: min(78vw, 360px); justify-self: center; transform: rotate(-3deg); }
-.specimen img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; box-shadow: 0 2px 0 var(--hair), 0 40px 70px -40px rgba(28, 26, 23, 0.6); }
-.specimen figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); margin-top: var(--s3); font-size: 0.86rem; color: var(--ink-2); }
-.specimen figcaption b { font: 400 1.6rem/1 var(--serif); color: var(--ink); }
-.presences { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
-.presence { display: flex; align-items: center; gap: var(--s2); font: italic 400 1.05rem/1.2 var(--serif); color: var(--ink-2); }
-.landing-copy { display: grid; gap: var(--s4); max-width: 34rem; }
-.landing-sub { font: 500 clamp(1.15rem, 2vw, 1.45rem)/1.3 var(--sans); }
-.landing-detail { color: var(--ink-2); }
-.landing-actions { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s3); }
-@media (min-width: 1000px) {
-  .landing-stage { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); grid-template-rows: auto auto; column-gap: var(--s8); }
-  .landing-title { grid-column: 1; grid-row: 1; align-self: end; font-size: clamp(6rem, 9.6vw, 10.5rem); }
-  .landing-copy { grid-column: 1; grid-row: 2; align-self: start; }
-  .specimen { grid-column: 2; grid-row: 1 / span 2; width: min(32vw, 500px); align-self: center; }
-  .presences { position: absolute; inset: 0; display: block; pointer-events: none; }
-  .presence { position: absolute; max-width: 15rem; }
-  .presence-budget { left: 52%; top: 6%; }
-  .presence-owned { right: 0; top: 12%; }
-  .presence-goals { left: 54%; bottom: 8%; }
-  .presence-deal { right: 0; bottom: 14%; }
-}
+/* ACT 0 · landing lives in Landing.css */
 
 /* ============ THE APP ============ */
-.app { min-height: 100svh; display: flex; flex-direction: column; }
+.app { min-height: 100svh; display: flex; flex-direction: column; animation: k-fade 0.7s var(--ease) backwards; }
 .mast { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: var(--s3) var(--s5); padding: var(--s4) var(--gutter); border-bottom: 1px solid var(--hair); }
 .mast .source { grid-row: 1; grid-column: 2; }
 .persona { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--s1) var(--s5); margin: 0; font-size: 0.8rem; }
@@ -449,36 +422,12 @@ html.still *, html.still *::before, html.still *::after { animation: none !impor
   .items { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter); }
   .item { white-space: nowrap; }
 }
-@media (max-width: 599px) { .landing-detail { display: none; } .landing-stage { gap: var(--s5); padding-top: var(--s4); } }
 
 /* =========================================================
    v3 · the object, the ring, the ledger
    ========================================================= */
 
-/* the single call to action, and its quiet alternative */
-.text-link { background: none; border: 0; padding: var(--s3) var(--s2); min-height: 44px; color: var(--ink-2); font-size: 0.95rem; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--hair-2); }
-.text-link:hover { color: var(--ink); text-decoration-color: currentColor; }
-.landing-actions { align-items: center; }
-
-/* the object: depth from a real light source (offset shadows), a sheen that follows the tilt, a slow float */
-.specimen-body {
-  position: relative; display: block; border-radius: 6px; overflow: hidden;
-  transform: perspective(1400px) rotateY(calc(var(--tx, 0) * 16deg)) rotateX(calc(var(--ty, 0) * -12deg));
-  transition: transform 0.7s var(--ease);
-  box-shadow: 0 2px 2px rgba(28, 26, 23, 0.08), 0 24px 40px -18px rgba(28, 26, 23, 0.38), 0 70px 90px -50px rgba(28, 26, 23, 0.45);
-  animation: k-float 7s ease-in-out infinite;
-}
-.specimen-body img { box-shadow: none !important; border-radius: 0 !important; }
-.sheen {
-  position: absolute; inset: -20%; pointer-events: none;
-  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.34) 50%, transparent 62%);
-  translate: calc(var(--tx, 0) * 70%) 0; transition: translate 0.7s var(--ease);
-  mix-blend-mode: soft-light;
-}
-@keyframes k-float { 50% { translate: 0 -10px; } }
-.specimen::after { content: ''; display: block; height: 14px; margin: 18px 12% 0; border-radius: 50%; background: rgba(28, 26, 23, 0.16); filter: blur(10px); animation: k-shadow 7s ease-in-out infinite; }
-@keyframes k-shadow { 50% { transform: scaleX(0.9); opacity: 0.7; } }
-.specimen figcaption { margin-top: var(--s2); }
+/* the camera frame's depth */
 .frame-wrap { box-shadow: 0 2px 2px rgba(28, 26, 23, 0.08), 0 24px 40px -20px rgba(28, 26, 23, 0.36), 0 60px 80px -50px rgba(28, 26, 23, 0.4); }
 
 /* the Convergence Ring: its size is the council's regret (wide apart, or close around the object) */
@@ -523,9 +472,6 @@ html.still *, html.still *::before, html.still *::after { animation: none !impor
   .clarity-word { font-size: clamp(5rem, 14vw, 11.5rem); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .specimen-body, .specimen::after { animation: none !important; transform: none !important; }
-}
 @media (min-width: 1000px) {
   .clarity-inner { padding-top: var(--s5); padding-bottom: var(--s5); gap: var(--s4); }
   .clarity-word { font-size: clamp(4.5rem, 12vw, 10.5rem); }
