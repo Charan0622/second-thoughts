@@ -146,3 +146,7 @@ Full test guide: [`docs/TESTING.md`](docs/TESTING.md). Tests: `cd backend && uv 
 | `spikes/FINDINGS.md` | Measured API behaviour and latencies from the risk spikes |
 
 All persona data is invented. No real personal or financial data is used.
+
+## Adobe Firefly: Two Futures
+
+After the verdict, a "Two futures. One decision." section shows two images made with Adobe Firefly: "If you buy it." and "If you wait." They are artistic interpretations, not predictions. They are static files in `frontend/public/futures/`, the app makes no Firefly API calls, and the artwork has no say in the verdict: the marked side comes only from the council's `band`. Details, including the prompts used, are in [docs/ADOBE_FIREFLY.md](docs/ADOBE_FIREFLY.md).

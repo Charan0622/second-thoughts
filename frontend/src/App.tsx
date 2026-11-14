@@ -11,6 +11,7 @@ import Camera from './Camera'
 import Council, { Evidence } from './Council'
 import Verdict, { Clarity } from './Verdict'
 import Landing from './Landing'
+import TwoFutures from './TwoFutures'
 import Ledger from './Ledger'
 import PhoneLink from './PhoneLink'
 import DocsPanel from './DocsPanel'
@@ -334,6 +335,8 @@ export default function App() {
             )}
           </AnimatePresence>
         </main>
+
+        {state.verdict && <TwoFutures key={`futures-${state.runId}`} verdict={state.verdict} />}
 
         <Verdict state={state} muted={muted} setMuted={setMuted} mock={mock} onInspect={setInspect} />
 
