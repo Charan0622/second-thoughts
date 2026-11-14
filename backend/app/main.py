@@ -88,6 +88,8 @@ async def verdict(req: dict):
                 if ev["type"] == "verdict":
                     _last.clear()
                     _last.update({"verdict": ev, "votes": votes})
+                    if ev["band"] == "buy_with_condition" or ev.get("tally", {}).get("wait", 0) not in (0, len(votes)):
+                        _last["task"] = asyncio.create_task(clerk.explain(ev, votes))
                 yield json.dumps({k: v for k, v in ev.items() if not k.startswith("_")}) + "\n"
         except Exception as e:  # noqa: BLE001
             yield json.dumps({"type": "error", "message": f"{type(e).__name__}: {str(e)[:300]}"}) + "\n"
@@ -101,7 +103,12 @@ async def explain():
     """Intern (the Clerk) explains the most recent verdict in one paragraph."""
     if not _last:
         raise HTTPException(404, "no verdict yet")
-    return await clerk.explain(_last["verdict"], _last["votes"])
+    task = _last.get("task") or asyncio.create_task(clerk.explain(_last["verdict"], _last["votes"]))
+    _last["task"] = task
+    try:
+        return await asyncio.wait_for(asyncio.shield(task), 80)
+    except asyncio.TimeoutError:
+        return {"ok": False, "text": "The Clerk (Intern) is still writing — try again in a moment."}
 
 
 @app.post("/api/clerk/setup")

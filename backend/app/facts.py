@@ -135,23 +135,38 @@ def _page_image(doc: str, page: int | None) -> Image.Image | None:
 
 
 def make_crop(fact: Fact) -> None:
+    """Cut a ~3:1 'snipped paper' crop around the cited region and highlight the exact line."""
     if not fact.bbox:
         return
     img = _page_image(fact.doc, fact.page)
     if img is None:
         return
     W, H = img.size
-    x0, y0, x1, y1 = fact.bbox
-    # pad generously so the line has context; extend left so table rows show their label
-    px, py = 0.03, 0.012
-    box = (max(0, int((x0 - px) * W)), max(0, int((y0 - py) * H)), min(W, int((x1 + px) * W)), min(H, int((y1 + py) * H)))
-    if box[2] - box[0] < 40 or box[3] - box[1] < 12:
+    x0, y0, x1, y1 = (fact.bbox[0] * W, fact.bbox[1] * H, fact.bbox[2] * W, fact.bbox[3] * H)
+    if x1 - x0 < 8 or y1 - y0 < 4:
         return
-    crop = img.crop(box)
+    # horizontal: bbox + margin; vertical: grow to ~3:1 aspect around the line, so neighbours give context
+    bx0, bx1 = max(0, x0 - 0.03 * W), min(W, x1 + 0.03 * W)
+    if bx1 - bx0 < 0.6 * W:  # value-only box (e.g. "$2,480.00"): widen leftward to include the row label
+        bx0 = max(0, bx1 - 0.6 * W) if bx1 > 0.6 * W else 0
+        bx1 = max(bx1, min(W, bx0 + 0.6 * W))
+    want_h = max((bx1 - bx0) / 3.0, (y1 - y0) + 0.02 * H)
+    cy = (y0 + y1) / 2
+    by0, by1 = max(0, cy - want_h / 2), min(H, cy + want_h / 2)
+    crop = img.crop((int(bx0), int(by0), int(bx1), int(by1))).convert("RGBA")
+    # highlighter over the cited line (only when the region is a line, not a whole block)
+    if (y1 - y0) < 0.6 * (by1 - by0):
+        overlay = Image.new("RGBA", crop.size, (0, 0, 0, 0))
+        from PIL import ImageDraw
+        d = ImageDraw.Draw(overlay)
+        pad = max(2, int(0.004 * H))
+        d.rounded_rectangle((x0 - bx0 - pad, y0 - by0 - pad, x1 - bx0 + pad, y1 - by0 + pad), radius=pad * 2,
+                            fill=(255, 221, 51, 95), outline=(240, 180, 0, 220), width=max(2, pad // 2))
+        crop = Image.alpha_composite(crop, overlay)
+    crop = crop.convert("RGB")
     if crop.width > 900:
         crop = crop.resize((900, int(crop.height * 900 / crop.width)))
-    out = CROPS / f"{fact.id}.png"
-    crop.save(out)
+    crop.save(CROPS / f"{fact.id}.png")
     fact.crop_url = f"/files/crops/{fact.id}.png"
 
 

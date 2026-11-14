@@ -19,15 +19,22 @@ SYSTEM1 = "drex-latest"
 SYSTEM2 = "deepinfra/Qwen/Qwen3.8-27B"
 
 
-async def run(prompt: str, *, timeout: float = 120.0, note: str = "") -> dict:
+QUICK = PRIVATE / "clerk_ws"
+QUICK.mkdir(exist_ok=True)
+
+
+async def run(prompt: str, *, timeout: float = 120.0, note: str = "", quick: bool = False) -> dict:
     exe = shutil.which("intern") or os.path.expanduser("~/.local/bin/intern")
     env = {**os.environ, "NACE_API_KEY": NACE_API_KEY, "DEEPINFRA_API_KEY": DEEPINFRA_API_KEY}
     t = time.perf_counter()
     ok = False
     try:
+        args = [exe, "--system1", SYSTEM1, "--system2", SYSTEM2, "-p", "--json"]
+        if quick:  # prose only: empty workspace, no repo context, two turns max
+            args += ["--cwd", str(QUICK), "--no-context-files", "--max-turns", "2", "--no-session", "--no-memory"]
         proc = await asyncio.create_subprocess_exec(
-            exe, "--system1", SYSTEM1, "--system2", SYSTEM2, "-p", "--json", "--", prompt,
-            cwd=str(ROOT), env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            *args, "--", prompt,
+            cwd=str(QUICK if quick else ROOT), env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         out, err = await asyncio.wait_for(proc.communicate(), timeout)
         text = out.decode(errors="replace")
         ok = proc.returncode == 0
@@ -40,18 +47,21 @@ async def run(prompt: str, *, timeout: float = 120.0, note: str = "") -> dict:
 
 
 def _final_text(out: str) -> str:
-    """Intern --json may print one JSON object or JSONL events; take the last text-ish field."""
-    last = ""
-    for line in out.strip().splitlines() or [out]:
+    """Intern --json emits JSONL events; the answer is the last assistant `message` (fallback: joined text_deltas)."""
+    last, deltas = "", []
+    for line in out.splitlines():
         try:
-            obj = json.loads(line)
+            ev = json.loads(line)
         except Exception:  # noqa: BLE001
             continue
-        for k in ("result", "text", "content", "message", "output", "final"):
-            v = obj.get(k) if isinstance(obj, dict) else None
-            if isinstance(v, str) and v.strip():
-                last = v
-    return (last or out).strip()
+        if ev.get("type") == "message" and (ev.get("message") or {}).get("role") == "assistant":
+            m = ev["message"]
+            txt = m.get("text") or (m.get("content") if isinstance(m.get("content"), str) else "")
+            if txt and txt.strip():
+                last = txt
+        elif ev.get("type") == "text_delta":
+            deltas.append(ev.get("text", ""))
+    return (last or "".join(deltas)).strip()
 
 
 async def setup_summary() -> dict:
@@ -72,4 +82,4 @@ async def explain(verdict: dict, votes: list[dict]) -> dict:
               + (f" with condition '{verdict['condition']}'" if verdict.get("condition") else "")
               + f". Votes:\n{lines}\n\nWrite one short paragraph (max 80 words) for Maya explaining why the selves disagreed "
                 "and why the condition resolves it. Only use the facts given. Reply with the paragraph only; do not create files.")
-    return await run(prompt, timeout=90, note="explain split verdict")
+    return await run(prompt, timeout=75, note="explain split verdict", quick=True)

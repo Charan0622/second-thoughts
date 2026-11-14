@@ -15,6 +15,13 @@ from .config import PRIVATE
 
 CACHE = PRIVATE / "keenable_cache.json"
 _cache: dict[str, dict] = json.loads(CACHE.read_text()) if CACHE.exists() else {}
+def clean(s: str) -> str:
+    s = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", s or "")      # markdown links/images → text
+    s = re.sub(r"https?://\S+", "", s)
+    s = re.sub(r"[#*_`>|]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 PRICE = re.compile(r"\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)")
 
 
@@ -29,8 +36,8 @@ def _parse(resp, item_price: float | None) -> dict:
         title = getattr(r, "title", "") or ""
         url = getattr(r, "url", "") or ""
         snippet = getattr(r, "snippet", None) or getattr(r, "content", None) or getattr(r, "text", "") or ""
-        results.append({"title": title[:140], "url": url, "host": urlparse(url).netloc.replace("www.", ""),
-                        "snippet": str(snippet)[:400]})
+        results.append({"title": clean(title)[:140], "url": url, "host": urlparse(url).netloc.replace("www.", ""),
+                        "snippet": clean(str(snippet))[:400]})
     if not results:  # fall back to parsing to_context()
         ctx = resp.to_context()
         for block in ctx.split("\n\n[")[:6]:
@@ -42,7 +49,7 @@ def _parse(resp, item_price: float | None) -> dict:
     for r in results:
         for m in PRICE.findall(r["title"] + " " + r["snippet"]):
             v = float(m.replace(",", ""))
-            if item_price is None or 0.4 * item_price <= v <= 2.5 * item_price:
+            if item_price is None or 0.5 * item_price <= v <= 1.5 * item_price:
                 prices.append(v)
     return {"results": results, "prices": prices,
             "low": min(prices) if prices else None, "median": statistics.median(prices) if prices else None,

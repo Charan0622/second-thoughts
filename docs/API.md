@@ -34,7 +34,7 @@ The response is one JSON object per line, in the order shown. The frontend reads
  "reason":"Rent $1,850 on Nov 20 becomes unpayable"}
 {"type":"pool", "p":0.58, "band":"buy_with_condition", "weights":{"budget":2.3,"goals":3.1,"owned":2.0,"deal":1.4}}
 // only when 0.35 <= p <= 0.65 and no veto:
-{"type":"negotiation", "offers":[{"id":"skip_takeout_2","label":"Skip two takeout orders","amount":54.0}, ...],
+{"type":"negotiation", "offers":[{"id":"skip_takeout_2","label":"Skip two takeout orders","amount":54.0 /* number or null */}, ...],
  "picks":[{"agent":"goals","offer_id":"wait_payday","p_before":0.71,"p_after":0.22}],
  "chosen":{"id":"wait_payday","label":"Wait until payday (Nov 27)","p_after":0.31}, "ms":340}
 {"type":"verdict", "band":"buy"|"buy_with_condition"|"wait",
