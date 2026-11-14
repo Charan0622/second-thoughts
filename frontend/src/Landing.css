@@ -1,0 +1,242 @@
+/* Second Thoughts · landing
+   One object on four threads. The tag is the only lit thing in the room; the selves hold it. */
+
+.lp {
+  --tw: clamp(150px, 15vw, 252px);             /* tag width; everything on the tag scales from it */
+  --fs: clamp(4.4rem, 12vw, 14rem);             /* the sentence */
+  --hg: clamp(14px, 2.4vw, 46px);               /* the breath either side of the tag */
+  --th: calc(var(--tw) * 1.5);
+  --glide: cubic-bezier(0.65, 0, 0.35, 1);
+  position: relative; isolation: isolate;
+  min-height: 100svh; overflow: hidden;
+  display: grid; grid-template-rows: auto 1fr auto;
+  padding: var(--s4) var(--gutter) clamp(28px, 6svh, 64px);
+  background:
+    radial-gradient(60% 55% at 50% 46%, #FAF7F0 0%, rgba(250, 247, 240, 0) 70%),
+    var(--ivory);
+  color: var(--ink);
+  touch-action: manipulation;
+}
+.lp ::selection { background: var(--ink); color: var(--ivory); }
+
+/* ---------- mast ---------- */
+.lp-mast { display: flex; justify-content: space-between; align-items: center; min-height: 44px; position: relative; z-index: 4; }
+.lp-word { display: inline-flex; align-items: center; gap: var(--s3); font: 400 1.5rem/1 var(--serif); letter-spacing: -0.01em; }
+.lp-drex { font: 400 0.9rem/1 var(--sans); color: var(--ink-2); letter-spacing: 0.01em; }
+.lp-drex b { font-weight: 600; color: var(--ink); letter-spacing: 0; }
+
+/* ---------- the composed block: selves above, the sentence and its object below ---------- */
+.lp-center {
+  align-self: center; position: relative;
+  display: grid; justify-items: stretch;
+  padding-block: clamp(8px, 2svh, 24px);
+}
+.lp-selves { order: -1; list-style: none; margin: 0; padding: 0; position: relative; z-index: 3;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: var(--s5);
+  margin-bottom: clamp(40px, 10svh, 120px); }
+.lp-self {
+  display: grid; justify-items: center; align-content: start; gap: 6px; text-align: center;
+  transition: transform 0.9s var(--ease), opacity 0.6s var(--ease);
+}
+.lp-self-name { display: inline-flex; align-items: center; gap: 10px; font: 500 0.98rem/1.2 var(--sans); color: var(--ink-2); transition: color 0.5s var(--ease); }
+.lp-self-name .mark { width: 10px; height: 10px; }
+.lp-self-q {
+  font: italic 400 clamp(1.2rem, 1.55vw, 1.55rem)/1.1 var(--serif); letter-spacing: -0.005em; color: var(--ink);
+  opacity: 0; transform: translateY(-6px); filter: blur(3px);
+  transition: opacity 0.6s var(--ease), transform 0.8s var(--ease), filter 0.6s var(--ease);
+}
+.lp-knot {
+  width: 7px; height: 7px; margin-top: 10px; border-radius: 50%;
+  background: var(--a); opacity: 0.45; transform: scale(0.8);
+  transition: opacity 0.5s var(--ease), transform 0.6s var(--ease);
+}
+.lp-self.is-awake .lp-self-name { color: var(--ink); }
+.lp-self.is-awake .lp-self-q { opacity: 1; transform: none; filter: none; }
+.lp-self.is-awake .lp-knot { opacity: 1; transform: scale(1.25); }
+
+/* threads: drawn in page pixels by Landing.tsx, from each knot to the eyelet */
+.lp-threads { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; overflow: visible; }
+.lp-thread {
+  fill: none; stroke: var(--a); stroke-width: 1; stroke-linecap: round; opacity: 0.32;
+  transition: opacity 0.6s var(--ease), stroke-width 0.6s var(--ease);
+}
+.lp-thread.is-taut { opacity: 0.95; stroke-width: 1.5; }
+
+/* ---------- the sentence ---------- */
+.lp-h1 {
+  margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
+  column-gap: var(--hg);
+  font: 400 var(--fs)/0.8 var(--serif); letter-spacing: -0.04em;
+  font-kerning: normal; font-feature-settings: 'kern', 'liga';
+  white-space: nowrap;
+}
+.lp-a { justify-self: end; }
+.lp-b { justify-self: start; }
+.lp-a, .lp-b { position: relative; z-index: 0; transition: transform 1s var(--glide), opacity 0.7s var(--ease), filter 0.8s var(--ease); }
+
+/* ---------- the object ---------- */
+.lp-tag-slot { position: relative; z-index: 1; display: block; width: var(--tw); height: var(--th); perspective: 1100px; }
+.lp-tag {
+  position: absolute; inset: 0; display: block; transform-origin: 50% 8.5%;
+  transform: rotateZ(calc(var(--tx, 0) * 5deg)) rotateY(calc(var(--tx, 0) * 15deg)) rotateX(calc(var(--ty, 0) * -9deg));
+  filter:
+    drop-shadow(0 1px 1px rgba(28, 26, 23, 0.10))
+    drop-shadow(calc(12px - var(--tx, 0) * 16px) 30px 22px rgba(28, 26, 23, 0.20))
+    drop-shadow(calc(26px - var(--tx, 0) * 30px) 64px 46px rgba(28, 26, 23, 0.14));
+  will-change: transform;
+}
+.lp-tag-face {
+  position: absolute; inset: 0; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: calc(var(--tw) * 0.25) 11% calc(var(--tw) * 0.09);
+  clip-path: polygon(24% 0, 76% 0, 100% 12%, 100% 100%, 0 100%, 0 12%);
+  background: linear-gradient(calc(158deg + var(--tx, 0) * 26deg), #FFFEFB 0%, #FBF8F1 42%, #EFE8DB 100%);
+  color: var(--ink);
+}
+/* paper tooth and a light that slides across as the tag turns */
+.lp-tag-face::before, .lp-tag-face::after { content: ''; position: absolute; inset: 0; pointer-events: none; }
+.lp-tag-face::before {
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.7) 46%, transparent 60%);
+  translate: calc(var(--tx, 0) * 60%) 0; mix-blend-mode: soft-light;
+}
+.lp-tag-face::after {
+  opacity: 0.55; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.40 0 0 0 0 0.33 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.lp-eyelet {
+  position: absolute; left: 50%; top: 8.5%; width: calc(var(--tw) * 0.11); aspect-ratio: 1; translate: -50% -50%; border-radius: 50%; z-index: 1;
+  background:
+    radial-gradient(circle, #CFC5B3 0 36%, #B5AA96 41%, transparent 43%),
+    conic-gradient(from 200deg, #7E6132, #EAD5A4, #A7824A, #5F4722, #C8A665, #7E6132);
+  box-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 3px rgba(28, 26, 23, 0.25);
+}
+.lp-tag-name {
+  position: relative; z-index: 1; max-width: 100%;
+  font: 600 calc(var(--tw) * 0.048)/1.3 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2);
+  white-space: normal; text-wrap: balance;
+}
+.lp-tag-price {
+  position: relative; z-index: 1; margin-top: calc(var(--tw) * 0.1);
+  font: 400 calc(var(--tw) * 0.42)/0.9 var(--serif); letter-spacing: -0.045em; font-variant-numeric: lining-nums;
+}
+.lp-tag-price sup { font-size: 0.36em; vertical-align: top; position: relative; top: 0.18em; letter-spacing: 0; margin: 0 0.04em; }
+.lp-tag-code {
+  position: relative; z-index: 1; margin-top: auto; width: 100%;
+  display: flex; justify-content: center; height: calc(var(--tw) * 0.13);
+  padding-top: calc(var(--tw) * 0.06); border-top: 1px dashed var(--hair-2); box-sizing: content-box;
+}
+.lp-tag-code i { display: block; height: 100%; background: var(--ink); flex: none; }
+
+/* ---------- coda ---------- */
+.lp-coda { display: grid; justify-items: center; gap: clamp(18px, 3svh, 30px); position: relative; z-index: 4; margin-top: clamp(28px, 5svh, 56px); }
+.lp-sub { margin: 0; font: italic 400 clamp(2rem, 3.4vw, 3.4rem)/1 var(--serif); letter-spacing: -0.02em; text-align: center; }
+.lp-cta {
+  display: inline-flex; align-items: center; gap: 14px;
+  min-height: 64px; padding: 0 28px 0 34px; border: 0; border-radius: 999px;
+  background: var(--ink); color: var(--ivory);
+  font: 500 1.06rem/1 var(--sans); letter-spacing: 0.005em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 2px 3px rgba(28, 26, 23, 0.14), 0 18px 34px -16px rgba(28, 26, 23, 0.6);
+  transition: transform 0.4s var(--ease), box-shadow 0.4s var(--ease), background-color 0.4s var(--ease);
+}
+.lp-cta svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: translate 0.4s var(--ease); }
+.lp-cta:hover { transform: translateY(-2px); background-color: #000; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 3px 4px rgba(28, 26, 23, 0.14), 0 26px 40px -18px rgba(28, 26, 23, 0.65); }
+.lp-cta:hover svg { translate: 4px 0; }
+.lp-cta:active { transform: translateY(0) scale(0.98); transition-duration: 0.12s; }
+.lp-cta:focus-visible { outline: 2px solid var(--ink); outline-offset: 5px; border-radius: 999px; }
+
+/* ---------- desktop: the question and the action hang under "it.", the tag is the fulcrum ---------- */
+@media (min-width: 1000px) {
+  .lp-center { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); column-gap: var(--hg); }
+  .lp-selves, .lp-h1 { grid-column: 1 / -1; }
+  .lp-h1 { grid-template-columns: subgrid; }
+  .lp-coda {
+    grid-column: 3; justify-items: start; text-align: left;
+    margin-top: calc(var(--fs) * 0.4 + clamp(22px, 3.4svh, 40px) - var(--th) / 2);
+    padding-left: 0.04em;
+  }
+  .lp-sub { text-align: left; }
+}
+
+/* ---------- entrance: the halves meet, the tag is hung, the selves take hold ---------- */
+@keyframes lp-from-left { from { opacity: 0; transform: translateX(-4vw); filter: blur(8px); } }
+@keyframes lp-from-right { from { opacity: 0; transform: translateX(4vw); filter: blur(8px); } }
+@keyframes lp-hang { from { opacity: 0; transform: translateY(-46px) rotate(-7deg); } 60% { opacity: 1; } }
+@keyframes lp-in { from { opacity: 0; } }
+@keyframes lp-up { from { opacity: 0; transform: translateY(14px); } }
+.lp-a { animation: lp-from-left 1.2s var(--ease) 0.1s backwards; }
+.lp-b { animation: lp-from-right 1.2s var(--ease) 0.1s backwards; }
+.lp-tag-slot { animation: lp-hang 1.6s var(--ease) 0.4s backwards; transform-origin: 50% 0; }
+.lp-threads { animation: lp-in 1.2s var(--ease) 1.1s backwards; }
+.lp-self { animation: lp-in 0.9s var(--ease) calc(1.05s + var(--i) * 0.09s) backwards; }
+.lp-coda { animation: lp-up 1s var(--ease) 0.75s backwards; }
+.lp-mast { animation: lp-in 1s var(--ease) backwards; }
+
+/* ---------- ask: the sentence parts, every self wakes and travels down its thread ---------- */
+.lp.is-leaving { pointer-events: none; }
+.lp.is-leaving .lp-a { transform: translateX(-16vw); opacity: 0; filter: blur(10px); }
+.lp.is-leaving .lp-b { transform: translateX(16vw); opacity: 0; filter: blur(10px); }
+.lp.is-leaving .lp-coda { opacity: 0; transform: translateY(18px); transition: opacity 0.4s var(--ease), transform 0.6s var(--ease); }
+.lp.is-leaving .lp-drex { opacity: 0; transition: opacity 0.4s var(--ease); }
+.lp.is-leaving .lp-self {
+  transform: translate(var(--cx, 0), var(--cy, 0)); opacity: 0;
+  transition: transform 0.8s var(--glide) calc(0.34s + var(--i) * 0.05s), opacity 0.25s var(--ease) calc(1s + var(--i) * 0.05s);
+}
+.lp.is-leaving .lp-self .lp-self-name, .lp.is-leaving .lp-self .lp-self-q {
+  opacity: 0; filter: blur(6px); transform: none;
+  transition: opacity 0.3s var(--ease) 0.3s, filter 0.3s var(--ease) 0.3s;
+}
+.lp.is-leaving .lp-self .lp-knot { opacity: 1; transform: scale(1.5); }
+.lp.is-leaving .lp-tag-slot { opacity: 0; transform: scale(0.82); transition: transform 1s var(--glide) 0.3s, opacity 0.35s var(--ease) 1s; }
+.lp.is-leaving .lp-threads { opacity: 0; transition: opacity 0.3s var(--ease) 1s; }
+
+/* ---------- tablet ---------- */
+@media (max-width: 999px) {
+  .lp { --tw: clamp(140px, 22vw, 200px); --fs: clamp(4.4rem, 10.6vw, 14rem); }
+  .lp-selves { column-gap: var(--s3); }
+  .lp-self-name { font-size: 0.9rem; }
+}
+
+/* ---------- phone: the tag sits above the sentence, held from both sides ---------- */
+@media (max-width: 699px) {
+  .lp { --tw: clamp(108px, 32vw, 150px); --fs: clamp(4rem, 25vw, 7rem); padding-bottom: clamp(24px, 4svh, 40px); }
+  .lp-word { font-size: 1.3rem; }
+  .lp-drex { font-size: 0.82rem; }
+  .lp-center { padding-block: 0; }
+  .lp-h1 {
+    grid-template-columns: 1fr; grid-template-areas: 'tag' 'a' 'b'; justify-items: center;
+    line-height: 0.84; row-gap: 0;
+  }
+  .lp-tag-slot { grid-area: tag; margin-bottom: clamp(14px, 2.6svh, 26px); }
+  .lp-a { grid-area: a; justify-self: center; }
+  .lp-b { grid-area: b; justify-self: center; }
+  .lp-selves {
+    order: 0; position: absolute; left: 0; right: 0; top: 0; height: var(--th);
+    grid-template-columns: minmax(0, 1fr) var(--tw) minmax(0, 1fr); grid-template-rows: 1fr 1fr; column-gap: 24px;
+    align-items: center; margin: 0;
+  }
+  .lp-self { position: relative; gap: 4px; }
+  .lp-self-budget { grid-area: 1 / 1; }
+  .lp-self-goals { grid-area: 1 / 3; }
+  .lp-self-owned { grid-area: 2 / 1; }
+  .lp-self-deal { grid-area: 2 / 3; }
+  .lp-self-budget, .lp-self-owned { justify-items: end; text-align: right; }
+  .lp-self-goals, .lp-self-deal { justify-items: start; text-align: left; }
+  .lp-self-name { font-size: 0.86rem; text-wrap: balance; }
+  .lp-self-name .mark { display: none; }
+  .lp-tag-name { display: none; }
+  .lp-tag-face { padding-top: calc(var(--tw) * 0.34); }
+  .lp-self-q { font-size: 1.08rem; }
+  .lp-knot { position: absolute; top: 0.5em; margin: 0; }
+  .lp-self-budget .lp-knot, .lp-self-owned .lp-knot { right: -14px; }
+  .lp-self-goals .lp-knot, .lp-self-deal .lp-knot { left: -14px; }
+  .lp-sub { font-size: clamp(1.7rem, 8vw, 2.2rem); }
+  .lp-coda { margin-top: clamp(22px, 4svh, 40px); gap: clamp(14px, 2.4svh, 22px); }
+  .lp-cta { min-height: 58px; padding: 0 24px 0 28px; font-size: 1rem; }
+}
+
+/* ---------- reduced motion: everything present, nothing swings ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .lp-a, .lp-b, .lp-tag-slot, .lp-threads, .lp-self, .lp-coda, .lp-mast { animation: none; }
+  .lp-tag { transform: none; }
+}
+.lp.is-still .lp-thread { opacity: 0.7; }
