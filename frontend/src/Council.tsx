@@ -1,206 +1,233 @@
 import { useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import type { AgentId, Citation, Pick, VetoEvent, VoteEvent } from './api'
+import { motion } from 'framer-motion'
+import { AGENTS, type AgentId, type Citation, type Persona, type Pick, type VetoEvent, type VoteEvent } from './api'
 import type { RunState } from './App'
 
-export const AGENT_META: Record<AgentId, { label: string; glyph: string; question: string; reads: string }> = {
-  budget: { label: 'Budget You', glyph: '$', question: 'What can I actually afford?', reads: 'Bank statement · pay stub' },
-  goals: { label: 'Goals You', glyph: '↗', question: 'What does this do to my future?', reads: 'Savings tracker · rules memo' },
-  owned: { label: 'Already-Own-It You', glyph: '≈', question: 'Do I already have something like it?', reads: 'Receipts' },
-  deal: { label: 'Deal You', glyph: '%', question: 'Is this a good price right now?', reads: 'Live price search' },
+export const AGENT_META: Record<AgentId, { label: string; short: string; question: string; reads: string }> = {
+  budget: { label: 'Budget You', short: 'Budget', question: 'Can I afford it?', reads: 'bank statement and pay stub' },
+  goals: { label: 'Goals You', short: 'Goals', question: 'What does it cost my future?', reads: 'savings tracker and rules memo' },
+  owned: { label: 'Already-Own-It You', short: 'Already own it', question: 'Do I have one already?', reads: 'receipts' },
+  deal: { label: 'Deal You', short: 'Deal', question: 'Is this the right price?', reads: 'live price search' },
 }
 
 const EASE = [0.16, 1, 0.3, 1] as const
-const word = (s: 'buy' | 'wait') => (s === 'buy' ? 'Buy' : 'Wait')
-const stanceOf = (p: number): 'buy' | 'wait' => (p < 0.5 ? 'buy' : 'wait')
+type Stance = 'buy' | 'wait'
+const word = (s: Stance) => (s === 'buy' ? 'Buy' : 'Wait')
+const stanceOf = (p: number): Stance => (p < 0.5 ? 'buy' : 'wait')
+const amounts = (s: string) => [...s.matchAll(/\$\s?([\d,]+(?:\.\d+)?)/g)].map((m) => ({ text: `$${m[1]}`, n: parseFloat(m[1].replace(/,/g, '')) }))
+
+/** Where each self sits, and where its line meets the object (viewBox 0–100). */
+const ANCHOR: Record<AgentId, [number, number]> = { budget: [30, 26], goals: [30, 74], owned: [70, 26], deal: [70, 74] }
+const CENTER: [number, number] = [50, 44]
+
+export interface Position { first?: Stance; now?: Stance; moved: boolean; pick?: Pick }
+export function positionOf(state: RunState, a: AgentId): Position {
+  const vote = state.votes[a]
+  const pick = state.negotiation?.picks.find((p) => p.agent === a)
+  const first = vote ? (vote.stance ?? stanceOf(vote.p_regret)) : undefined
+  const after = pick ? stanceOf(pick.p_after) : undefined
+  const now = after ?? first
+  return { first, now, moved: !!(first && after && first !== after), pick }
+}
 
 interface Props {
   state: RunState
-  side: 'left' | 'right'
-  agents: AgentId[]
+  persona: Persona | null
   onInspect: (a: AgentId) => void
   inspecting: AgentId | null
 }
 
-export default function Council({ state, side, agents, onInspect, inspecting }: Props) {
+export default function Council({ state, persona, onInspect, inspecting }: Props) {
   const awake = state.phase !== 'idle' && !(state.phase === 'error' && !state.perceive)
-  const neg = state.negotiation
   return (
-    <section className={`selves selves-${side}`} aria-label={side === 'left' ? 'Budget and goals' : 'Possessions and price'}>
-      {agents.map((a, i) => (
-        <Self
-          key={`${a}-${state.runId}`}
-          agent={a}
-          side={side}
-          order={side === 'left' ? i : i + 2}
-          awake={awake}
-          listening={awake && !state.votes[a] && state.phase !== 'error'}
-          vote={state.votes[a]}
-          veto={a === 'budget' ? state.veto : undefined}
-          pick={neg?.picks.find((p) => p.agent === a)}
-          offerLabel={(id) => neg?.offers.find((o) => o.id === id)?.label ?? id}
-          onInspect={() => onInspect(a)}
-          inspecting={inspecting === a}
-        />
+    <div className="council" aria-label="Your four selves">
+      {/* A line joins a self to the object only when that self says buy. */}
+      <svg className="beams" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+        {AGENTS.map((a) => {
+          const pos = positionOf(state, a)
+          if (pos.now !== 'buy') return null
+          const [x, y] = ANCHOR[a]
+          const k = 0.55
+          return (
+            <line key={`${a}-${state.runId}-${pos.moved}`} className="beam" x1={x} y1={y} x2={x + (CENTER[0] - x) * k} y2={y + (CENTER[1] - y) * k}
+              stroke={`var(--${a})`} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinecap="round"
+              style={{ animationDelay: pos.moved ? '500ms' : '150ms' }} />
+          )
+        })}
+      </svg>
+      {AGENTS.map((a, i) => (
+        <Self key={`${a}-${state.runId}`} agent={a} order={i} awake={awake} state={state} persona={persona}
+          onInspect={() => onInspect(a)} inspecting={inspecting === a} />
       ))}
-    </section>
+    </div>
   )
 }
 
 interface SelfProps {
   agent: AgentId
-  side: 'left' | 'right'
   order: number
   awake: boolean
-  listening: boolean
-  vote?: VoteEvent
-  veto?: VetoEvent
-  pick?: Pick
-  offerLabel: (id: string) => string
+  state: RunState
+  persona: Persona | null
   onInspect: () => void
   inspecting: boolean
 }
 
-function Self({ agent, side, order, awake, listening, vote, veto, pick, offerLabel, onInspect, inspecting }: SelfProps) {
+function Self({ agent, order, awake, state, persona, onInspect, inspecting }: SelfProps) {
   const meta = AGENT_META[agent]
-  const first = vote ? vote.stance ?? stanceOf(vote.p_regret) : undefined
-  const after = pick ? stanceOf(pick.p_after) : undefined
-  const now = after ?? first
-  const moved = !!(first && after && first !== after)
+  const vote = state.votes[agent]
+  const { first, now, moved, pick } = positionOf(state, agent)
+  const veto = agent === 'budget' ? state.veto : undefined
   const vetoed = !!veto?.fired
+  const listening = awake && !vote && state.phase !== 'error'
 
-  const body = (
+  const content = (
     <>
-      <span className="tether" aria-hidden data-stance={now ?? 'none'} />
-      <header className="self-head">
-        <span className="glyph" aria-hidden>{meta.glyph}</span>
-        <span className="self-name">{vote?.label ?? meta.label}</span>
-      </header>
-      <p className="self-q">{meta.question}</p>
+      <span className="self-top">
+        <span className={`mark mark-${agent}`} aria-hidden />
+        <span className="self-name">{meta.label}</span>
+      </span>
 
-      <div className="position" aria-live="polite">
-        <AnimatePresence mode="wait" initial={false}>
-          {vote ? (
-            <motion.div key={`${first}-${after ?? ''}`} className="position-inner"
-              initial={{ opacity: 0, y: 10, scale: 1.04 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.5, ease: EASE }}>
-              {moved ? (
-                <>
-                  <span className={`stance stance-${first} is-struck`}>{word(first!)}</span>
-                  <span className={`stance stance-${after}`}>{word(after!)}</span>
-                </>
-              ) : (
-                <span className={`stance stance-${now}`}>{word(now!)}</span>
-              )}
-            </motion.div>
-          ) : listening ? (
-            <motion.span key="listening" className="listening" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              Reading {meta.reads.toLowerCase()}
-            </motion.span>
-          ) : (
-            <motion.span key="quiet" className="quiet" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              Reads {meta.reads.toLowerCase()}
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {vote && (
-        <motion.div className="self-body" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4, delay: 0.1 }}>
-          <p className="headline">{vote.headline}</p>
-          <p className="cite"><span className="cite-mark" aria-hidden>“</span>{vote.citation.quote.replace(/^[“"]|[”"]$/g, '')}<span className="cite-src"> {vote.citation.doc_label}{vote.citation.page != null ? `, p.${vote.citation.page}` : ''}</span></p>
-          {pick && (
-            <p className="moved">
-              With “{offerLabel(pick.offer_id)}”: regret {pick.p_before.toFixed(2)} → <b>{pick.p_after.toFixed(2)}</b>
-            </p>
-          )}
-          <p className="numbers">
-            <span>regret <b>{vote.p_regret.toFixed(2)}</b></span>
-            <span>stake <b>{vote.stake.toFixed(1)}</b></span>
-            <span className="open">Evidence →</span>
-          </p>
-        </motion.div>
+      {vote ? (
+        <span className="self-stance enter" key={`${first}-${now}`}>
+          {moved && <s className={`stance stance-${first} is-was`}>{word(first!)}</s>}
+          <span className={`stance stance-${now}`}>{word(now!)}</span>
+        </span>
+      ) : (
+        <span className={`self-question ${listening ? 'is-listening' : ''}`}>
+          {listening ? <>Reading your {meta.reads}</> : meta.question}
+        </span>
       )}
 
-      <AnimatePresence>
-        {vetoed && (
-          <motion.div className="veto" role="note"
-            initial={{ opacity: 0, scale: 1.3, rotate: -6 }} animate={{ opacity: 1, scale: 1, rotate: -3 }}
-            transition={{ duration: 0.45, ease: EASE, delay: 0.1 }}>
-            <span className="veto-word">Veto</span>
-            <span className="veto-reason">{veto!.reason}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {vote && (
+        <span className="self-detail enter" style={{ animationDelay: '150ms' }}>
+          <Viz agent={agent} vote={vote} state={state} persona={persona} />
+          <span className="self-headline">{vote.headline}</span>
+          {pick && moved && (
+            <span className="self-moved">Moved by “{state.negotiation?.offers.find((o) => o.id === pick.offer_id)?.label ?? pick.offer_id}”</span>
+          )}
+          <span className="self-open">See the evidence</span>
+        </span>
+      )}
+
+      {vetoed && <VetoStamp veto={veto!} />}
     </>
   )
 
-  const cls = `self self-${agent} side-${side} ${awake ? 'is-awake' : ''} ${vote ? 'has-vote' : ''} ${moved ? 'has-moved' : ''} ${vetoed ? 'is-veto' : ''} ${inspecting ? 'is-open' : ''}`
-  const enter = { opacity: awake ? 1 : 0.55, x: 0 }
+  const cls = `self self-${agent} ${awake ? 'is-awake' : ''} ${vote ? 'has-vote' : ''} ${moved ? 'has-moved' : ''} ${vetoed ? 'is-veto' : ''} ${inspecting ? 'is-open' : ''}`
+  const common = {
+    className: `${cls} arrive`,
+    'data-stance': now ?? 'none',
+    style: { ['--a' as string]: `var(--${agent})`, ['--i' as string]: order, animationDelay: `${(awake ? 0 : 200) + order * 110}ms` },
+  }
   return vote ? (
-    <motion.button type="button" className={cls} style={{ ['--a' as string]: `var(--${agent})` }}
-      onClick={onInspect} aria-label={`${meta.label}: ${word(now!)}. Open evidence.`}
-      initial={{ opacity: 0.55, x: side === 'left' ? -8 : 8 }} animate={enter} transition={{ duration: 0.6, ease: EASE, delay: awake ? order * 0.08 : 0 }}>
-      {body}
-    </motion.button>
+    <button type="button" {...common} onClick={onInspect} aria-label={`${meta.label} says ${word(now!)}. ${vote.headline}. Open the evidence.`}>
+      {content}
+    </button>
   ) : (
-    <motion.div className={cls} style={{ ['--a' as string]: `var(--${agent})` }}
-      initial={{ opacity: 0.55, x: side === 'left' ? -8 : 8 }} animate={enter} transition={{ duration: 0.6, ease: EASE, delay: awake ? order * 0.08 : 0 }}>
-      {body}
-    </motion.div>
+    <div {...common} aria-label={`${meta.label}: ${meta.question}`}>{content}</div>
   )
 }
 
-/* ---------- Evidence sheet ---------- */
+function VetoStamp({ veto }: { veto: VetoEvent }) {
+  return (
+    <span className="veto stamp" role="note"><b>Veto</b>{veto.reason}</span>
+  )
+}
+
+/* Each self shows its fact in its own visual language. Every number is read from the stream. */
+function Viz({ agent, vote, state, persona }: { agent: AgentId; vote: VoteEvent; state: RunState; persona: Persona | null }) {
+  if (agent === 'budget') {
+    const a = amounts(vote.headline)
+    const big = a.at(-1)
+    return big ? <span className="viz viz-budget"><span className="figure">{big.text}</span></span> : null
+  }
+  if (agent === 'goals') {
+    const slip = state.verdict?.price_terms.japan_slip_days
+    if (!persona) return null
+    const pct = Math.min(1, persona.japan.saved / persona.japan.target)
+    return (
+      <span className="viz viz-goals" aria-label={`Japan fund ${persona.japan.saved} of ${persona.japan.target}`}>
+        <span className="timeline"><span className="timeline-fill" style={{ width: `${pct * 100}%` }} /><span className="timeline-dot" style={{ left: `${pct * 100}%` }} /></span>
+        <span className="timeline-label">Japan fund ${persona.japan.saved.toLocaleString('en-US')} / ${persona.japan.target.toLocaleString('en-US')}{slip != null ? <b> · slips {slip} days</b> : null}</span>
+      </span>
+    )
+  }
+  if (agent === 'owned') {
+    return <span className="viz viz-owned"><span className="receipt">{vote.citation.quote.replace(/^[“"]|[”"]$/g, '')}</span></span>
+  }
+  const price = state.perceive?.price ?? null
+  const other = amounts(vote.headline).find((x) => price == null || Math.abs(x.n - price) > 0.5)
+  if (price == null || !other) return null
+  const max = Math.max(price, other.n)
+  return (
+    <span className="viz viz-deal" aria-label={`This tag ${price}, elsewhere ${other.text}`}>
+      <span className="bar"><span style={{ width: `${(price / max) * 100}%` }} /><em>this tag ${price.toLocaleString('en-US')}</em></span>
+      <span className="bar bar-other"><span style={{ width: `${(other.n / max) * 100}%` }} /><em>elsewhere {other.text}</em></span>
+    </span>
+  )
+}
+
+/* ---------- Evidence trail ---------- */
 
 export function Evidence({ agent, state, mock, onClose }: { agent: AgentId; state: RunState; mock: boolean; onClose: () => void }) {
   const vote = state.votes[agent]!
   const meta = AGENT_META[agent]
-  const pick = state.negotiation?.picks.find((p) => p.agent === agent)
+  const { first, now, moved, pick } = positionOf(state, agent)
   const closeRef = useRef<HTMLButtonElement>(null)
   useEffect(() => { closeRef.current?.focus() }, [])
-  const provenance = mock ? 'Mock fixture: recorded event, not a live model call'
-    : vote.citation.doc.startsWith('keenable') ? 'Live web search via Keenable'
-    : 'Extracted from your documents by NDI'
+  const cached = /cache/i.test(vote.citation.doc_label) || /cache/i.test(vote.citation.doc)
+  const provenance = mock ? { tag: 'Simulated', text: 'Recorded fixture event, not a live model call' }
+    : cached ? { tag: 'Cached', text: 'From a stored snapshot of a live source' }
+    : { tag: 'Live', text: vote.citation.doc.startsWith('keenable') ? 'Live web search via Keenable' : 'Extracted from your documents by NDI' }
+  const terms = state.verdict?.price_terms
+  const calc = agent === 'budget' && terms ? `${terms.pct_free_cash}% of your free cash · ${terms.hours_of_work.toFixed(1)} hours of work`
+    : agent === 'goals' && terms ? `Pushes the Japan trip back ${terms.japan_slip_days} days`
+    : null
 
   return (
     <motion.div className="sheet-scrim" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <motion.aside
-        className="sheet" role="dialog" aria-modal="true" aria-label={`${meta.label}: evidence`}
-        style={{ ['--a' as string]: `var(--${agent})` }}
-        onClick={(e) => e.stopPropagation()}
-        initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 40, opacity: 0 }}
-        transition={{ duration: 0.4, ease: EASE }}>
+      <motion.aside className="sheet" role="dialog" aria-modal="true" aria-label={`${meta.label}: evidence`}
+        style={{ ['--a' as string]: `var(--${agent})` }} onClick={(e) => e.stopPropagation()}
+        initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 24, opacity: 0 }} transition={{ duration: 0.45, ease: EASE }}>
         <header className="sheet-head">
-          <span className="glyph" aria-hidden>{meta.glyph}</span>
-          <div>
-            <p className="sheet-name">{meta.label}</p>
-            <p className="sheet-q">{meta.question}</p>
-          </div>
-          <button ref={closeRef} className="sheet-close" onClick={onClose} aria-label="Close evidence">Close</button>
+          <span className={`mark mark-${agent}`} aria-hidden />
+          <span className="sheet-name">{meta.label}</span>
+          <span className={`prov prov-${provenance.tag.toLowerCase()}`}>{provenance.tag}</span>
+          <button ref={closeRef} className="sheet-close" onClick={onClose}>Close</button>
         </header>
 
-        <p className={`sheet-stance stance-${vote.stance}`}>{word(vote.stance)}</p>
+        <p className="sheet-stance">
+          {moved && <s className={`stance stance-${first}`}>{word(first!)}</s>} <span className={`stance stance-${now}`}>{word(now!)}</span>
+        </p>
         <p className="sheet-headline">{vote.headline}</p>
-        {pick && (
-          <p className="sheet-moved">
-            Re-asked with “{state.negotiation?.offers.find((o) => o.id === pick.offer_id)?.label ?? pick.offer_id}”:
-            regret {pick.p_before.toFixed(2)} → <b>{pick.p_after.toFixed(2)}</b>, so {word(stanceOf(pick.p_after)).toLowerCase()}.
-          </p>
-        )}
 
-        <p className="label">The decisive fact</p>
-        <Source c={vote.citation} />
-
-        <dl className="facts">
-          <div><dt>Source</dt><dd>{vote.citation.doc_label}{vote.citation.page != null ? `, page ${vote.citation.page}` : ''}</dd></div>
-          <div><dt>File</dt><dd><code>{vote.citation.doc}</code></dd></div>
-          {vote.citation.bbox && <div><dt>Region</dt><dd>{vote.citation.bbox.map((n) => n.toFixed(2)).join(', ')}</dd></div>}
-          {vote.cite_p != null && <div><dt>Drex’s probability for this fact</dt><dd>{vote.cite_p.toFixed(2)}</dd></div>}
-          <div><dt>Regret · stake</dt><dd>{vote.p_regret.toFixed(2)} · {vote.stake.toFixed(1)} of 10</dd></div>
-          <div><dt>Model · time</dt><dd>{vote.model} · {vote.ms} ms</dd></div>
-          <div><dt>Data</dt><dd>{provenance}</dd></div>
-        </dl>
+        <ol className="trail">
+          <li>
+            <p className="label">The fact</p>
+            <Source c={vote.citation} />
+          </li>
+          <li>
+            <p className="label">Where it came from</p>
+            <p>{vote.citation.doc_label}{vote.citation.page != null ? `, page ${vote.citation.page}` : ''} <code>{vote.citation.doc}</code></p>
+            <p className="muted">{provenance.text}</p>
+          </li>
+          <li>
+            <p className="label">Why it matters here</p>
+            <p>{meta.question} {vote.headline}.</p>
+            {calc && <p className="muted">Computed by the backend: {calc}</p>}
+          </li>
+          {pick && (
+            <li>
+              <p className="label">In the negotiation</p>
+              <p>Re-asked with “{state.negotiation?.offers.find((o) => o.id === pick.offer_id)?.label ?? pick.offer_id}”: regret {pick.p_before.toFixed(2)} → <b>{pick.p_after.toFixed(2)}</b>.</p>
+            </li>
+          )}
+          <li>
+            <p className="label">The model</p>
+            <p className="mono">{vote.model} · {vote.ms} ms · regret {vote.p_regret.toFixed(2)} · stake {vote.stake.toFixed(1)}/10{vote.cite_p != null ? ` · fact probability ${vote.cite_p.toFixed(2)}` : ''}</p>
+          </li>
+        </ol>
       </motion.aside>
     </motion.div>
   )
