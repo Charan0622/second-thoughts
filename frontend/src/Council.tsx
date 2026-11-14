@@ -11,8 +11,8 @@ export const AGENT_META: Record<AgentId, { label: string; short: string; questio
 }
 
 const EASE = [0.16, 1, 0.3, 1] as const
-type Stance = 'buy' | 'wait'
-const word = (s: Stance) => (s === 'buy' ? 'Buy' : 'Wait')
+type Stance = 'buy' | 'wait' | 'abstain'
+const word = (s: Stance) => (s === 'buy' ? 'Buy' : s === 'abstain' ? 'Abstains' : 'Wait')
 const stanceOf = (p: number): Stance => (p < 0.5 ? 'buy' : 'wait')
 const amounts = (s: string) => [...s.matchAll(/\$\s?([\d,]+(?:\.\d+)?)/g)].map((m) => ({ text: `$${m[1]}`, n: parseFloat(m[1].replace(/,/g, '')) }))
 
@@ -181,8 +181,8 @@ export function Evidence({ agent, state, mock, onClose }: { agent: AgentId; stat
     : cached ? { tag: 'Cached', text: 'From a stored snapshot of a live source' }
     : { tag: 'Live', text: vote.citation.doc.startsWith('keenable') ? 'Live web search via Keenable' : 'Extracted from your documents by NDI' }
   const terms = state.verdict?.price_terms
-  const calc = agent === 'budget' && terms ? `${terms.pct_free_cash}% of your free cash · ${terms.hours_of_work.toFixed(1)} hours of work`
-    : agent === 'goals' && terms ? `Pushes the Japan trip back ${terms.japan_slip_days} days`
+  const calc = agent === 'budget' && terms ? `${terms.pct_free_cash}% of your free cash · ${terms.hours_of_work.toFixed(1)} hours of take-home pay`
+    : agent === 'goals' && terms ? (terms.japan_slip_days > 0 ? `Pushes the ${terms.goal_name ?? 'Japan'} goal back ${terms.japan_slip_days} days` : `Paid from free cash — ${terms.goal_name ?? 'Japan'} stays on track (${terms.japan_slip_if_from_savings ?? 0} days if paid from savings)`)
     : null
 
   return (

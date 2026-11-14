@@ -12,6 +12,8 @@ import Council, { Evidence } from './Council'
 import Verdict, { Clarity } from './Verdict'
 import Landing from './Landing'
 import Ledger from './Ledger'
+import PhoneLink from './PhoneLink'
+import DocsPanel from './DocsPanel'
 
 export type Phase = 'idle' | 'perceiving' | 'council' | 'pooled' | 'done' | 'error'
 
@@ -91,7 +93,11 @@ export default function App() {
     ;(async () => {
       let useMock = forceMock
       if (!useMock) {
-        try { await fetchHealth() } catch { useMock = true }
+        let up = false
+        for (let i = 0; i < 25 && !cancelled && !up; i++) {
+          try { await fetchHealth(); up = true } catch { await new Promise((r) => setTimeout(r, 1000)) }
+        }
+        if (!up) { useMock = true; toast('Backend offline — showing MOCK data. Start the backend and reload.') }
       }
       if (cancelled) return
       setMock(useMock)
@@ -115,6 +121,8 @@ export default function App() {
     abortRef.current?.abort()
     const ctl = new AbortController()
     abortRef.current = ctl
+    let timedOut = false
+    const guard = setTimeout(() => { timedOut = true; ctl.abort() }, 30000)
     if ('speechSynthesis' in window) window.speechSynthesis.cancel()
     setInspect(null)
     setClarity(false)
@@ -128,10 +136,13 @@ export default function App() {
         if (ev.type === 'sentence') speak(ev.text)
       }
     } catch (e) {
+      if (timedOut) { toast('That took too long — try again or type the price'); dispatch({ kind: 'reset' }); return }
       if (ctl.signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) return
       const message = e instanceof Error ? e.message : String(e)
       dispatch({ kind: 'fail', message })
       toast(message)
+    } finally {
+      clearTimeout(guard)
     }
   }, [mock, speak, toast])
 
@@ -142,8 +153,8 @@ export default function App() {
 
   const runDemo = useCallback((id: DemoItemId) => {
     setSelected(id)
-    run({ demo_item: id, frame: null, price: parsedPrice, item_name: null })
-  }, [run, parsedPrice])
+    run({ demo_item: id, frame: null, price: null, item_name: null })
+  }, [run])
 
   const runFrame = useCallback((frame: string) => {
     run({ demo_item: null, frame, price: parsedPrice, item_name: null })
@@ -173,7 +184,8 @@ export default function App() {
       const tag = (e.target as HTMLElement | null)?.tagName
       if (e.key === 'Escape') { setInspect(null); setClarity(false); return }
       if (view !== 'app') return
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || e.metaKey || e.ctrlKey) return
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.metaKey || e.ctrlKey) return
+      if (tag === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return
       const idx = ['1', '2', '3'].indexOf(e.key)
       if (idx >= 0 && demoMode) { e.preventDefault(); runDemo(DEMO_IDS[idx]) }
       if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && demoMode) {
@@ -239,6 +251,8 @@ export default function App() {
             <span className="brand-mark" aria-hidden><i /><i /></span>Second Thoughts
           </button>
           <PersonaLine persona={persona} />
+          <DocsPanel onChange={() => { fetchPersona().then(setPersona).catch(() => {}) }} />
+          <PhoneLink runId={state.runId} onFrame={(frame, price) => run({ demo_item: null, frame, price: price ?? parsedPrice, item_name: null })} />
           <span className={`source ${mock ? 'source-mock' : 'source-live'}`} title={mock ? 'Backend not reachable: replaying recorded fixture events' : 'Connected to the live backend'}>
             {mock ? 'Mock fixtures' : 'Live'}
           </span>

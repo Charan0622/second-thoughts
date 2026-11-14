@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .. import drex
-from ..config import TODAY
 from ..facts import Fact
 
 
@@ -15,6 +14,8 @@ class Item:
     name: str
     category: str          # running_gear | headphones | computer | gadget | clothing | other
     price: float
+
+    name_source: str = "ndi"
 
     @property
     def is_gadget(self) -> bool:
@@ -37,6 +38,8 @@ class Vote:
 
     @property
     def stance(self) -> str:
+        if self.extra.get("abstain"):
+            return "abstain"
         return "buy" if self.p_regret < 0.5 else "wait"
 
     def event(self) -> dict:
@@ -45,12 +48,14 @@ class Vote:
                 "citation": self.citation, "cite_p": round(self.cite_p, 3), "model": self.model, "ms": round(self.ms)}
 
 
-REGRET_Q = "Will Maya regret this purchase, or will it cause her a problem, within the next 30 days — judged only from your perspective?"
+REGRET_Q = "Will the buyer regret this purchase, or will it cause them a problem, within the next 30 days — judged only from your perspective?"
 
 
 def build_state(role: str, mandate: str, facts: list[Fact], computed: list[str], item: Item) -> str:
-    lines = [f"You are {role}, one of Maya's future selves on her spending council. Today is {TODAY}.",
-             f"Your mandate: {mandate}", "", "Facts from Maya's own documents:"]
+    from .. import facts as F
+    p = F.persona
+    lines = [f"You are {role}, one of {p.first_name}'s future selves on their spending council. Today is {p.today}.",
+             f"The buyer is {p.first_name}.", f"Your mandate: {mandate}", "", f"Facts from {p.first_name}'s own documents:"]
     lines += [f"[{f.id}] {f.text}" for f in facts]
     if computed:
         lines += ["", "Computed by the app (exact):"] + [f"- {c}" for c in computed]
@@ -65,7 +70,7 @@ async def ask_council_member(*, agent: str, label: str, state: str, facts: list[
         "stake": drex.score("How much does this purchase matter from your perspective?", drex.STAKE_LEVELS),
     }
     if facts:
-        qs["decisive_fact"] = drex.choice("Which single fact from Maya's documents most decides your answer?",
+        qs["decisive_fact"] = drex.choice("Which single fact from the buyer's documents most decides your answer?",
                                           {f.id: f.text for f in facts})
     qs.update(extra_q or {})
     res = await drex.ask(state, qs, note=agent)

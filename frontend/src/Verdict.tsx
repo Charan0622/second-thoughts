@@ -35,8 +35,8 @@ export function Clarity({ state, onBack, onAgain }: { state: RunState; onBack: (
         )}
 
         <dl className="clarity-facts enter" style={{ animationDelay: '550ms' }}>
-          <div><dd>{v.price_terms.hours_of_work.toFixed(1)}<small>h</small></dd><dt>of your work</dt></div>
-          <div><dd>{v.price_terms.japan_slip_days}<small>d</small></dd><dt>Japan slips</dt></div>
+          <div><dd>{v.price_terms.hours_of_work.toFixed(1)}<small>h</small></dd><dt>of take-home pay</dt></div>
+          <div><dd>{v.price_terms.japan_slip_days}<small>d</small></dd><dt>{v.price_terms.goal_name ?? 'Japan'} slips</dt></div>
           <div><dd>{v.price_terms.pct_free_cash}<small>%</small></dd><dt>of free cash before payday</dt></div>
         </dl>
 
