@@ -64,9 +64,12 @@ async def demo_items():
 @app.get("/api/persona")
 async def persona():
     p = F.persona
-    return {"name": p.name, "free_cash": p.free_cash, "balance": p.balance, "next_payday": p.next_payday,
+    mode = F.get_mode()
+    return {"mode": mode, "name": p.name or "You", "free_cash": p.free_cash, "balance": p.balance, "next_payday": p.next_payday,
             "hourly": p.hourly, "scheduled": p.scheduled,
-            "japan": {"target": p.japan_target, "saved": p.japan_saved, "monthly": p.japan_monthly, "date": p.japan_date},
+            "japan": {"target": p.japan_target, "saved": p.japan_saved, "monthly": p.japan_monthly if p.has_goal else 0,
+                      "date": p.japan_date},
+            "has_goal": p.has_goal and p.japan_target > 0,
             "rules": p.rules, "rules_source": p.rules_source, "goal_name": p.goal_name, "goal_short": p.goal_short,
             "flags": p.flags, "sources": {k: v["owner"] for k, v in F.summary()["slots"].items()},
             "owned": {"item": p.owned_item, "price": p.owned_price, "date": p.owned_date},
@@ -86,7 +89,7 @@ async def ingest(request: Request, refresh: bool = False):
 
 
 # ---------------------------------------------------------------- your documents
-ALLOWED = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".heic", ".xlsx", ".xls", ".csv", ".eml", ".txt", ".docx", ".m4a", ".mp3", ".wav"}
+ALLOWED = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".heic", ".xlsx", ".xls", ".csv", ".eml", ".txt", ".docx"}
 _docs_lock = asyncio.Lock()
 
 
@@ -95,42 +98,69 @@ async def docs_status():
     return F.summary()
 
 
+@app.get("/api/mode")
+async def get_mode():
+    return {"mode": F.get_mode()}
+
+
+@app.post("/api/mode")
+async def set_mode(req: dict):
+    """Pick whose documents the council uses: "demo" (Maya), "mine" (your uploads only) or "none" (onboarding)."""
+    mode = req.get("mode")
+    if mode not in F.MODES:
+        raise HTTPException(422, f"mode must be one of {list(F.MODES)}")
+    async with _docs_lock:
+        F.set_mode(mode)
+        return await F.load()
+
+
 @app.post("/api/docs/{slot}")
 async def upload_doc(slot: str, files: list[UploadFile] = File(...)):
     """Replace one slot (bank | paystub | savings | receipts | rules) with your file(s); NDI extracts them now."""
     if slot not in F.DEMO_DOCS:
         raise HTTPException(404, f"unknown slot '{slot}'")
     d = F.MY_DOCS / slot
+    blobs = []
+    for i, f in enumerate(files[:5]):  # validate everything before touching the slot
+        name = Path(f.filename or f"upload_{i}").name
+        ext = Path(name).suffix.lower()
+        if ext not in ALLOWED:
+            raise HTTPException(415, f"{name}: unsupported file type {ext}")
+        data = await f.read()
+        if len(data) > 20 * 1024 * 1024:
+            raise HTTPException(413, f"{name}: larger than 20 MB")
+        safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in name)[:80] or f"upload_{i}{ext}"
+        blobs.append((safe, data))
     async with _docs_lock:
         shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True, exist_ok=True)
-        for i, f in enumerate(files[:5]):
-            name = Path(f.filename or f"upload_{i}").name
-            ext = Path(name).suffix.lower()
-            if ext not in ALLOWED:
-                raise HTTPException(415, f"{name}: unsupported file type {ext}")
-            data = await f.read()
-            if len(data) > 20 * 1024 * 1024:
-                raise HTTPException(413, f"{name}: larger than 20 MB")
-            safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in name)[:80] or f"upload_{i}{ext}"
+        for safe, data in blobs:
             (d / safe).write_bytes(data)
+        F.set_mode("mine")          # any upload switches to "your documents only"
         return await F.load()
 
 
 @app.delete("/api/docs")
 async def reset_docs(slot: str | None = None):
-    """Back to the demo persona (all slots, or one)."""
+    """Remove one slot's uploads (mode stays), or all of them (mode → "none": back to onboarding)."""
     async with _docs_lock:
         if slot:
             shutil.rmtree(F.MY_DOCS / slot, ignore_errors=True)
         else:
             shutil.rmtree(F.MY_DOCS, ignore_errors=True)
             F.MY_DOCS.mkdir(exist_ok=True)
+            F.set_mode("none")
         return await F.load()
+
+
+NO_MODE_MSG = "Choose your documents or the demo persona first"
 
 
 @app.post("/api/verdict")
 async def verdict(req: dict):
+    if F.get_mode() == "none":
+        msg = json.dumps({"type": "error", "message": NO_MODE_MSG, "needs_input": True}) + "\n"
+        return StreamingResponse(iter([msg]), media_type="application/x-ndjson")
     if not (req.get("demo_item") or req.get("frame")):
         raise HTTPException(422, "send demo_item or frame")
     if req.get("price") is not None:

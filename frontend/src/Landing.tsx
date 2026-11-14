@@ -43,7 +43,7 @@ export default function Landing({ item, onStart, onDemo, mock }: Props) {
           <p className="landing-detail">Point your camera at something you’re about to buy. Your budget, your goals, what you already own and the going price each weigh in from your own documents, then agree on one answer.</p>
           <div className="landing-actions">
             <button className="cta" onClick={onStart}>Get a second thought <span aria-hidden>→</span></button>
-            <button className="cta-quiet" onClick={onDemo}>Try the live demo</button>
+            <button className="cta-quiet" onClick={onDemo}>Try the demo persona (Maya)</button>
           </div>
         </div>
       </div>

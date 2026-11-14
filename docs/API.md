@@ -37,6 +37,19 @@ The response is one JSON object per line, in the order shown. The frontend reads
 {"type":"negotiation", "offers":[{"id":"skip_takeout_2","label":"Skip two takeout orders","amount":54.0 /* number or null */}, ...],
  "picks":[{"agent":"goals","offer_id":"wait_payday","p_before":0.71,"p_after":0.22}],
  "chosen":{"id":"wait_payday","label":"Wait until payday (Nov 27)","p_after":0.31}, "ms":340}
+// "say": the live debate transcript — short first-person lines, built in code from the events around them (no LLM).
+// After each vote (phase "vote"; "quote"/"doc_label" = the cited evidence, omitted when there is none):
+{"type":"say", "agent":"budget", "phase":"vote", "text":"I'm worried — $76 left for 13 days ($6/day).",
+ "stance":"wait", "p":0.71, "quote":"Available balance (Nov 14) $2,480.00", "doc_label":"Bank statement"}
+{"type":"say", "agent":"deal", "phase":"vote", "text":"I can't identify the exact product, so I'm sitting this one out.", "stance":"abstain"}
+// When the veto fires (right after the veto event):
+{"type":"say", "agent":"budget", "phase":"veto", "text":"Veto. Rent of $1,850 on 11/20 would bounce.", "p":0.959}
+// During negotiation, one per self as its offer scan finishes (before the negotiation event):
+{"type":"say", "agent":"goals", "phase":"negotiate", "text":"I'd accept: Top up Japan fund by $149 (0.97 → 0.04)",
+ "offer_id":"top_up_japan", "p_before":0.97, "p_after":0.04}   // or "Nothing on the table changes my mind." if best p_after >= 0.5
+// The moderator ("agent":"council") closes the debate, right before the verdict:
+{"type":"say", "agent":"council", "phase":"negotiate", "text":"Agreed: Top up Japan fund by $149."}  // or "No compromise satisfies everyone — wait."
+{"type":"say", "agent":"council", "phase":"verdict", "text":"Budget's veto stands. Wait until payday (11/27)."}  // veto; "No objections. Buy it." on a clean buy
 {"type":"verdict", "band":"buy"|"buy_with_condition"|"wait",
  "title":"Buy — with a condition", "p":0.31,
  "condition":"Wait until payday (Nov 27)" | null,
@@ -47,6 +60,8 @@ The response is one JSON object per line, in the order shown. The frontend reads
 {"type":"done"}
 // on failure at any point:
 {"type":"error", "message":"..."}
+// persona mode "none" (nobody chosen yet): the stream is just
+{"type":"error", "message":"Choose your documents or the demo persona first", "needs_input":true}
 ```
 
 Band thresholds: `< 0.35` → `buy`, `0.35–0.65` → `buy_with_condition`, `> 0.65` → `wait`. A veto always gives `wait`.
@@ -63,13 +78,27 @@ Band thresholds: `< 0.35` → `buy`, `0.35–0.65` → `buy_with_condition`, `> 
    "ndi":      {"calls":7,"errors":0,"ms_median":6100},
    "keenable": {"calls":3,"errors":0,"ms_median":1800},
    "deepinfra":{"calls":5,"errors":0,"ms_median":900},
-   "intern":   {"calls":1,"errors":0,"ms_median":14000},
-   "adobe":    {"calls":0,"note":"Firefly avatars + Express slides (offline)"}},
+   "intern":   {"calls":1,"errors":0,"ms_median":14000}},
  "verdicts":6, "cost_usd_est":0.012}
 ```
 
+## Persona mode: `GET /api/mode` · `POST /api/mode`
+Whose documents the council uses, persisted in `data/private/mode.json` (missing file = `"none"`).
+
+| mode | documents used | `/api/verdict` |
+|---|---|---|
+| `none` | nobody chosen yet (first visit). Demo docs are loaded internally for bench/tests only | refuses with an `error` event |
+| `demo` | the demo persona (Maya Chen) exactly; uploads in `my_docs/` are ignored | runs |
+| `mine` | **only** your uploads. A slot with no file is `"missing"`: never filled from Maya. Neutral defaults apply ($0 balance, no bills, payday 14 days out, no rules, no receipts, goal `"savings goal"` with $0), and each one is listed in `flags` | runs |
+
+`GET /api/mode` → `{"mode":"none"}`. `POST /api/mode {"mode":"demo"|"mine"|"none"}` reloads the facts and returns the same summary as `GET /api/docs`. A bad mode returns 422.
+
+## Your documents: `GET /api/docs` · `POST /api/docs/{slot}` · `DELETE /api/docs[?slot=]`
+Slots are `bank | paystub | savings | receipts | rules`. `POST` is multipart with field `files` (up to 5, each ≤ 20 MB). Allowed types: `.pdf .jpg .jpeg .png .webp .heic .xlsx .xls .csv .eml .txt .docx`. Audio is **not** accepted (415). Any upload sets mode `mine`. `DELETE` with no slot removes every upload and sets mode `none`. `DELETE ?slot=` clears one slot and keeps the mode.
+Summary: `{"mode":"mine","slots":{"bank":{"label":"Bank statement","owner":"yours"|"demo"|"missing","files":[...],"errors":[...]},...},"flags":["No pay stub uploaded — payday unknown (assuming 2026-11-28, 14 days from today)", ...],"facts":{...},"free_cash":900,"name":"..."}`
+
 ## `GET /api/persona`
-A summary for the "who am I" strip, for example `{"name":"Maya Chen","free_cash":425,"next_payday":"2026-11-27","japan":{"target":4000,"saved":2600,"monthly":280},"rules":["No gadgets over $200 before Japan. Running gear is exempt."]}`
+A summary for the "who am I" strip, for example `{"mode":"demo","name":"Maya Chen","free_cash":425,"next_payday":"2026-11-27","japan":{"target":4000,"saved":2600,"monthly":280,"date":"April 2027"},"has_goal":true,"goal_name":"Japan trip","goal_short":"Japan","flags":[],"rules":["No gadgets over $200 before Japan.","Running gear is exempt."], ...}`. When `mode` is `"none"` the other fields still describe the internal demo load; the UI shows "No documents yet". With no goal on file, `japan.monthly` is 0 and `has_goal` is false.
 
 ## `GET /api/health` → `{"ok":true,"facts_loaded":true}`
 

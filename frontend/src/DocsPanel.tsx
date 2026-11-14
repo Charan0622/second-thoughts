@@ -1,19 +1,24 @@
-// "Your documents": swap the demo persona's documents for your own, slot by slot.
-// Each upload goes to the backend, NDI extracts it right away, and the four selves switch to your data.
-// Files stay on this machine (data/private/my_docs, gitignored).
+// "Your documents": upload your own documents, slot by slot. The first upload switches the persona mode to
+// "mine": only your files are used, and a slot you skip is treated as unknown (never the demo persona's data).
+// Each upload goes to the backend, NDI extracts it right away. Files stay on this machine (data/private/my_docs).
 import { useCallback, useEffect, useState } from 'react'
+import type { PersonaMode } from './api'
 
-interface Slot { label: string; owner: 'yours' | 'demo'; files: string[]; errors: string[] }
-interface Summary { slots: Record<string, Slot>; flags: string[]; name: string; free_cash: number }
+interface Slot { label: string; owner: 'yours' | 'demo' | 'missing'; files: string[]; errors: string[] }
+interface Summary { mode?: PersonaMode; slots: Record<string, Slot>; flags: string[]; name: string; free_cash: number }
 
-interface Props { onChange: () => void }
+interface Props {
+  onChange: () => void
+  /** Bump to open the panel from outside (the onboarding card's "Upload your documents"). */
+  openSignal?: number
+}
 
 const ORDER: { id: string; hint: string; accept: string; multiple?: boolean }[] = [
   { id: 'bank', hint: 'Statement with balance + upcoming bills', accept: '.pdf,.jpg,.jpeg,.png,.webp,.csv,.xlsx' },
   { id: 'paystub', hint: 'Pay stub (rate, next pay date)', accept: '.pdf,.jpg,.jpeg,.png,.webp' },
   { id: 'savings', hint: 'Savings goal tracker', accept: '.xlsx,.xls,.csv,.pdf,.jpg,.png' },
   { id: 'receipts', hint: 'Receipts for things you own (up to 5)', accept: '.pdf,.eml,.jpg,.jpeg,.png,.webp,.txt', multiple: true },
-  { id: 'rules', hint: 'Your own spending rules (text or voice memo)', accept: '.txt,.pdf,.docx,.m4a,.mp3,.wav' },
+  { id: 'rules', hint: 'Your own spending rules (text, PDF or a photo of a note)', accept: '.txt,.pdf,.docx,.jpg,.jpeg,.png,.webp' },
 ]
 
 const CSS = `
@@ -43,8 +48,9 @@ const CSS = `
 .dcp-busy { font-size: 0.85rem; }
 `
 
-export default function DocsPanel({ onChange }: Props) {
+export default function DocsPanel({ onChange, openSignal = 0 }: Props) {
   const [open, setOpen] = useState(false)
+  useEffect(() => { if (openSignal > 0) setOpen(true) }, [openSignal])
   const [sum, setSum] = useState<Summary | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -81,7 +87,7 @@ export default function DocsPanel({ onChange }: Props) {
   }, [onChange])
 
   const reset = useCallback(async () => {
-    setBusy('Switching back to the demo persona…')
+    setBusy('Removing your documents…')
     try {
       const r = await fetch('/api/docs', { method: 'DELETE' })
       if (r.ok) { setSum(await r.json()); onChange() }
@@ -90,7 +96,7 @@ export default function DocsPanel({ onChange }: Props) {
     }
   }, [onChange])
 
-  const mine = sum ? Object.values(sum.slots).some((s) => s.owner === 'yours') : false
+  const mine = sum ? (sum.mode ? sum.mode === 'mine' : Object.values(sum.slots).some((s) => s.owner === 'yours')) : false
 
   return (
     <>
@@ -105,7 +111,7 @@ export default function DocsPanel({ onChange }: Props) {
               <span className="dcp-title">Your documents</span>
               <button type="button" className="dcp-x" aria-label="Close" onClick={() => setOpen(false)}>×</button>
             </div>
-            <p className="dcp-sub">Replace any of the demo documents with your own. NDI reads each one, and your four selves vote on <b>your</b> numbers. Files stay on this laptop.</p>
+            <p className="dcp-sub">Upload any of these. NDI reads each one, and your four selves vote on <b>your</b> numbers only: anything you skip is treated as unknown, never filled in from the demo persona. Files stay on this laptop.</p>
             {busy && <p className="dcp-busy">⏳ {busy}</p>}
             {err && <p className="dcp-err">{err}</p>}
             {sum && ORDER.map(({ id, hint, accept, multiple }) => {
@@ -115,7 +121,7 @@ export default function DocsPanel({ onChange }: Props) {
                 <div className="dcp-row" key={id}>
                   <div>
                     <span className="dcp-name">{s.label}</span>
-                    <span className={`dcp-tag ${s.owner}`}>{s.owner === 'yours' ? 'yours' : 'demo'}</span>
+                    <span className={`dcp-tag ${s.owner}`}>{s.owner === 'yours' ? 'yours' : s.owner === 'missing' ? 'not uploaded' : 'demo'}</span>
                     <div className="dcp-hint">{hint}</div>
                   </div>
                   <label className="dcp-up">
@@ -133,8 +139,8 @@ export default function DocsPanel({ onChange }: Props) {
             )}
             {sum && (
               <div className="dcp-foot">
-                <span>{sum.name} · free cash before payday <b>${sum.free_cash.toLocaleString()}</b></span>
-                {mine && <button type="button" className="dcp-reset" onClick={reset} disabled={!!busy}>Reset to demo</button>}
+                <span>{sum.mode === 'none' ? 'No documents yet' : <>{sum.name} · free cash before payday <b>${sum.free_cash.toLocaleString()}</b></>}</span>
+                {mine && <button type="button" className="dcp-reset" onClick={reset} disabled={!!busy}>Remove my documents</button>}
               </div>
             )}
           </div>

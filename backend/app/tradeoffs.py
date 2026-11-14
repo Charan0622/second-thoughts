@@ -25,7 +25,7 @@ def offers(item: Item, owns_similar: bool | None = None) -> list[Offer]:
     n, g = p.first_name, p.goal_short
     avg = p.avg_delivery
     two, four = round(2 * avg, 2), round(4 * avg, 2)
-    hours = round(item.price / p.hourly, 1)
+    hours = round(item.price / p.hourly, 1) if p.hourly else 0.0  # no pay stub (mode "mine") → offer dropped below
     owned_name = (p.owned_item or "similar item").split("(")[0].strip()
     resale = round(p.owned_price * 0.5)
     br = goals.broken_rule(item)
@@ -61,4 +61,6 @@ def offers(item: Item, owns_similar: bool | None = None) -> list[Offer]:
         drop |= {"resell_earbuds", "resell_and_topup"}
     if not p.delivery_count:
         drop |= {"skip_takeout_2", "skip_takeout_4"}
+    if not p.hourly:
+        drop.add("extra_hours")
     return [o for o in out if o.id not in drop]

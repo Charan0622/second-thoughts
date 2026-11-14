@@ -1,7 +1,7 @@
 // Offline stand-in for the backend. Emits the same NDJSON event sequence as
 // POST /api/verdict with realistic timings, so the UI can be demoed without it.
 import type {
-  AgentId, DemoItem, DemoItemId, Ledger, Persona, VerdictRequest, VerdictStreamEvent, VoteEvent,
+  AgentId, DemoItem, DemoItemId, Ledger, Persona, SayEvent, VerdictRequest, VerdictStreamEvent, VoteEvent,
 } from './api'
 
 export const MOCK_DEMO_ITEMS: DemoItem[] = [
@@ -58,6 +58,13 @@ interface Scenario {
   negotiation?: VerdictStreamEvent & { type: 'negotiation' }
   verdict: VerdictStreamEvent & { type: 'verdict' }
   sentence: string
+  /** The live debate ("say" events): one line per vote, the veto, each self's negotiation answer, the moderator. */
+  debate: {
+    vote: Record<AgentId, string>
+    veto?: string
+    negotiate?: { agent: AgentId; text: string; offer_id: string; p_before: number; p_after: number }[]
+    moderator: { phase: SayEvent['phase']; text: string }
+  }
 }
 
 const SCENARIOS: Record<DemoItemId, Scenario> = {
@@ -78,6 +85,15 @@ const SCENARIOS: Record<DemoItemId, Scenario> = {
     verdict: { type: 'verdict', band: 'buy', title: 'Buy it', p: 0.14, condition: null,
       tally: { buy: 4, wait: 0 }, price_terms: { hours_of_work: 2.6, japan_slip_days: 12, pct_free_cash: 26 }, total_ms: 684 },
     sentence: 'Running gear is exempt from your own rule and it fits before payday — go run.',
+    debate: {
+      vote: {
+        budget: 'I’m fine with it — $425 free → $315 left before payday.',
+        goals: 'No objection from me — running gear is exempt from our gadget rule.',
+        owned: 'Go ahead — no running shoes on any receipt this year.',
+        deal: 'I’m in — good price, typically $160 elsewhere.',
+      },
+      moderator: { phase: 'verdict', text: 'No objections. Buy it.' },
+    },
   },
   headphones: {
     perceive: { item_name: 'Sony WH-1000XM6 Headphones', category: 'headphones', category_p: 0.99, price_bucket: '200_399', price: 349 },
@@ -114,6 +130,21 @@ const SCENARIOS: Record<DemoItemId, Scenario> = {
       condition: 'Resell the earbuds (≈ +$90) AND put $149 into the Japan fund', tally: { buy: 2, wait: 2 },
       price_terms: { hours_of_work: 8.3, japan_slip_days: 38, pct_free_cash: 82 }, total_ms: 712 },
     sentence: 'Good price and it fits your budget — buy it if you resell the earbuds and move $149 into the Japan fund.',
+    debate: {
+      vote: {
+        budget: 'I’m fine with it — fits in $425 free cash, $76 left before payday.',
+        goals: 'This breaks our rule: no gadgets over $200 before Japan.',
+        owned: 'Hold on — we bought Pulse Pro earbuds in March for $179.',
+        deal: 'I’m in — good price, typically $378 elsewhere.',
+      },
+      negotiate: [
+        { agent: 'deal', text: 'I was already in. “Resell the earbuds (≈ +$90) AND put $149 into the Japan fund” is fine with me too.', offer_id: 'resell_and_topup', p_before: 0.08, p_after: 0.03 },
+        { agent: 'owned', text: 'I’d accept: Resell the earbuds (≈ +$90) AND put $149 into the Japan fund (0.78 → 0.05)', offer_id: 'resell_and_topup', p_before: 0.78, p_after: 0.05 },
+        { agent: 'budget', text: 'I was already in. “Resell the earbuds (≈ +$90) AND put $149 into the Japan fund” is fine with me too.', offer_id: 'resell_and_topup', p_before: 0.21, p_after: 0.06 },
+        { agent: 'goals', text: 'I’d accept: Resell the earbuds (≈ +$90) AND put $149 into the Japan fund (0.97 → 0.04)', offer_id: 'resell_and_topup', p_before: 0.97, p_after: 0.04 },
+      ],
+      moderator: { phase: 'negotiate', text: 'Agreed: Resell the earbuds (≈ +$90) AND put $149 into the Japan fund.' },
+    },
   },
   macmini: {
     perceive: { item_name: 'Apple Mac mini (M5, 16GB)', category: 'computer', category_p: 0.98, price_bucket: '400_799', price: 599 },
@@ -133,6 +164,16 @@ const SCENARIOS: Record<DemoItemId, Scenario> = {
       condition: 'Wait until payday (Nov 27)', tally: { buy: 1, wait: 3 },
       price_terms: { hours_of_work: 14.3, japan_slip_days: 64, pct_free_cash: 141 }, total_ms: 731 },
     sentence: 'Buying this today makes Friday’s rent bounce — your budget self is vetoing it until the Nov 27 paycheck lands.',
+    debate: {
+      vote: {
+        budget: 'We can’t cover it — $599 is $174 over our $425 free cash.',
+        goals: 'I object — slips Japan by 64 days and breaks our $200 rule.',
+        owned: 'Go ahead — no desktop computer on any receipt.',
+        deal: 'Not at this price — education + Black Friday pricing drops it to ~$499.',
+      },
+      veto: 'Veto. Rent of $1,850 on 11/20 would bounce.',
+      moderator: { phase: 'verdict', text: 'Budget’s veto stands. Wait until payday (11/27).' },
+    },
   },
 }
 
@@ -178,20 +219,31 @@ export async function* mockVerdict(req: VerdictRequest, signal: AbortSignal): As
       stance: v.p_regret < 0.5 ? 'buy' : 'wait',
       model: v.agent === 'budget' && id === 'macmini' ? 'drex-max-v1.1' : 'drex-v2.0', ms,
     }
+    const stance = v.p_regret < 0.5 ? 'buy' : 'wait'
+    yield { type: 'say', agent: v.agent, phase: 'vote', text: sc.debate.vote[v.agent], stance, p: v.p_regret,
+      quote: v.citation.quote, doc_label: v.citation.doc_label }
   }
 
   await sleep(60, signal)
   bump('drex')
   yield { type: 'veto', agent: 'budget', threshold: 0.93, ...sc.veto }
+  if (sc.veto.fired && sc.debate.veto) yield { type: 'say', agent: 'budget', phase: 'veto', text: sc.debate.veto, p: sc.veto.p }
   const weights = Object.fromEntries(sc.votes.map((v) => [v.agent, v.stake]))
   const band = sc.veto.fired ? 'wait' : sc.pool.p < 0.35 ? 'buy' : sc.pool.p <= 0.65 ? 'buy_with_condition' : 'wait'
   yield { type: 'pool', p: sc.pool.p, band, weights }
 
   if (sc.negotiation) {
-    await sleep(sc.negotiation.ms, signal)
+    const lines = sc.debate.negotiate ?? []
+    const step = sc.negotiation.ms / Math.max(1, lines.length)
+    for (const l of lines) {   // each self answers as its offer scan lands
+      await sleep(step + rand(0, 60), signal)
+      yield { type: 'say', phase: 'negotiate', ...l }
+    }
+    if (!lines.length) await sleep(sc.negotiation.ms, signal)
     bump('drex', sc.negotiation.picks.length)
     yield sc.negotiation
   }
+  yield { type: 'say', agent: 'council', ...sc.debate.moderator }
 
   await sleep(120, signal)
   const now = performance.now()

@@ -18,11 +18,14 @@ interface Props {
   perceive?: PerceiveEvent
   busy: boolean
   resolved: boolean
+  /** Demo items are reachable (only for the demo persona / mock): a small "or try an example" link. */
+  examples: boolean
+  onError?: (message: string) => void
 }
 
 const SHORT: Record<DemoItemId, string> = { shoes: 'Running shoes', headphones: 'Headphones', macmini: 'Mac mini' }
 const SOURCE_LABEL: Record<PerceiveEvent['price_source'], string> = {
-  ndi: 'Price read by NDI', manual: 'Price entered by you', cache: 'Cached price', bucket: 'Estimated price',
+  ndi: 'Price read by NDI', manual: 'Price entered by you', cache: 'Cached price', bucket: 'Estimated price', vision: 'Price read from the photo',
 }
 
 function grabFrame(video: HTMLVideoElement): string {
@@ -34,6 +37,25 @@ function grabFrame(video: HTMLVideoElement): string {
   c.height = Math.round(h * scale)
   c.getContext('2d')!.drawImage(video, 0, 0, c.width, c.height)
   return c.toDataURL('image/jpeg', 0.85)
+}
+
+/** An uploaded photo → JPEG data URL, longest side ≤ 1280 px (same shape as a webcam capture). */
+function downscaleFile(file: File, max = 1280): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const src = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight))
+      const c = document.createElement('canvas')
+      c.width = Math.max(1, Math.round(img.naturalWidth * scale))
+      c.height = Math.max(1, Math.round(img.naturalHeight * scale))
+      c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height)
+      URL.revokeObjectURL(src)
+      resolve(c.toDataURL('image/jpeg', 0.85))
+    }
+    img.onerror = () => { URL.revokeObjectURL(src); reject(new Error('This browser can’t read that image — try a JPEG or PNG')) }
+    img.src = src
+  })
 }
 
 const money = (n: number) => {
@@ -72,6 +94,18 @@ export default function Camera(p: Props) {
     }
   }, [captureRef, onCapture])
 
+  const upload = async (file: File | undefined) => {
+    if (!file || p.busy) return
+    try {
+      const url = await downscaleFile(file)
+      if (p.demoMode) p.setDemoMode(false)
+      setStill(url)
+      onCapture(url)                      // same path as a webcam capture: POST {frame, price}
+    } catch (e) {
+      p.onError?.(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   const item = p.items.find((i) => i.id === p.selected)
   const scanning = p.phase === 'perceiving'
   const showStill = !p.demoMode && still && p.phase !== 'idle'
@@ -91,7 +125,7 @@ export default function Camera(p: Props) {
           ) : showStill ? (
             <img className="frame" src={still!} alt="Captured frame" />
           ) : camError ? (
-            <div className="cam-error">Camera unavailable: {camError}. Switch back to the demo items.</div>
+            <div className="cam-error">Camera unavailable: {camError}. Upload a photo instead.</div>
           ) : null}
           {!p.demoMode && <video ref={videoRef} className="frame" muted playsInline style={{ visibility: showStill ? 'hidden' : 'visible' }} />}
           <AnimatePresence>
@@ -105,7 +139,7 @@ export default function Camera(p: Props) {
         </div>
 
         <div key={`${name ?? 'none'}-${price ?? 'none'}`} className="tag enter">
-            {name ? <h1 className="tag-name">{name}</h1> : <h1 className="tag-name tag-hint">Point the camera at a price tag</h1>}
+            {name ? <h1 className="tag-name">{name}</h1> : <h1 className="tag-name tag-hint">Upload a photo or point the camera at a price tag</h1>}
             <div className="tag-price">{price != null ? money(price) : <span className="tag-unknown">Price unknown</span>}</div>
             <div className="tag-source">
               {p.perceive
@@ -121,6 +155,11 @@ export default function Camera(p: Props) {
       </button>
 
       <div className="pick">
+        <label className="item" style={{ cursor: p.busy ? 'default' : 'pointer', alignSelf: 'center', opacity: p.busy ? 0.45 : 1 }}>
+          📷 Upload a photo of what you want to buy
+          <input type="file" accept="image/*" hidden disabled={p.busy}
+            onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = '' }} />
+        </label>
         {p.demoMode ? (
           <div className="items" role="radiogroup" aria-label="Demo items">
             {p.items.map((it, i) => (
@@ -138,9 +177,11 @@ export default function Camera(p: Props) {
           </div>
         ) : null}
         <div className="pick-row">
-          <button className="link" onClick={() => { p.setDemoMode(!p.demoMode); setStill(null) }} disabled={p.busy}>
-            {p.demoMode ? 'Use my camera' : 'Use demo items'}
-          </button>
+          {p.examples ? (
+            <button className="link" onClick={() => { p.setDemoMode(!p.demoMode); setStill(null) }} disabled={p.busy}>
+              {p.demoMode ? 'Use my camera' : 'or try an example'}
+            </button>
+          ) : <span />}
           <label className="override">
             <span>Price override</span>
             <input inputMode="decimal" placeholder="auto" value={p.manualPrice} onChange={(e) => p.setManualPrice(e.target.value)} />

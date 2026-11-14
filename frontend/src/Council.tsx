@@ -147,9 +147,9 @@ function Viz({ agent, vote, state, persona }: { agent: AgentId; vote: VoteEvent;
     if (!persona) return null
     const pct = Math.min(1, persona.japan.saved / persona.japan.target)
     return (
-      <span className="viz viz-goals" aria-label={`Japan fund ${persona.japan.saved} of ${persona.japan.target}`}>
+      <span className="viz viz-goals" aria-label={`${persona.goal_short ?? 'Japan'} fund ${persona.japan.saved} of ${persona.japan.target}`}>
         <span className="timeline"><span className="timeline-fill" style={{ width: `${pct * 100}%` }} /><span className="timeline-dot" style={{ left: `${pct * 100}%` }} /></span>
-        <span className="timeline-label">Japan fund ${persona.japan.saved.toLocaleString('en-US')} / ${persona.japan.target.toLocaleString('en-US')}{slip != null ? <b> · slips {slip} days</b> : null}</span>
+        <span className="timeline-label">{persona.goal_short ?? 'Japan'} fund ${persona.japan.saved.toLocaleString('en-US')} / ${persona.japan.target.toLocaleString('en-US')}{slip != null ? <b> · slips {slip} days</b> : null}</span>
       </span>
     )
   }

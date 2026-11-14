@@ -23,7 +23,7 @@ export interface PerceiveEvent {
   category_p: number
   price_bucket: string
   price: number | null
-  price_source: 'ndi' | 'manual' | 'cache' | 'bucket'
+  price_source: 'ndi' | 'manual' | 'cache' | 'bucket' | 'vision'
   ms: number
 }
 export interface CouncilStartEvent { type: 'council_start'; agents: AgentId[] }
@@ -86,6 +86,20 @@ export interface VerdictEvent {
   item?: { name: string; price: number | null; category: string }
 }
 export interface SentenceEvent { type: 'sentence'; text: string; source: 'deepinfra' | 'template' }
+/** A live debate line: first-person, built in code from the surrounding events. agent 'council' = the moderator. */
+export interface SayEvent {
+  type: 'say'
+  agent: AgentId | 'council'
+  text: string
+  phase: 'vote' | 'veto' | 'negotiate' | 'verdict'
+  stance?: 'buy' | 'wait' | 'abstain'
+  p?: number
+  quote?: string | null
+  doc_label?: string | null
+  offer_id?: string
+  p_before?: number
+  p_after?: number
+}
 export interface DoneEvent { type: 'done' }
 export interface ErrorEvent { type: 'error'; message: string }
 export interface AgentErrorEvent { type: 'agent_error'; message: string; agent?: AgentId }
@@ -100,6 +114,7 @@ export type VerdictStreamEvent =
   | NegotiationEvent
   | VerdictEvent
   | SentenceEvent
+  | SayEvent
   | DoneEvent
   | ErrorEvent
   | AgentErrorEvent
@@ -127,11 +142,19 @@ export interface Ledger {
   cost_usd_est: number
 }
 
+export type PersonaMode = 'none' | 'demo' | 'mine'
+
 export interface Persona {
+  /** Whose documents the council uses; "none" = nobody chosen yet (the council refuses to run). */
+  mode?: PersonaMode
   name: string
   free_cash: number
   next_payday: string
   japan: { target: number; saved: number; monthly: number }
+  has_goal?: boolean
+  goal_name?: string
+  goal_short?: string
+  flags?: string[]
   rules: string[]
 }
 
@@ -208,3 +231,9 @@ export async function fetchExplain(signal?: AbortSignal): Promise<string> {
 }
 
 export const fetchPersona = () => getJSON<Persona>('/api/persona')
+export const fetchMode = () => getJSON<{ mode: PersonaMode }>('/api/mode')
+/** POST /api/mode — switch persona mode; the backend reloads facts (fast for the cached demo docs). */
+export async function setPersonaMode(mode: PersonaMode): Promise<void> {
+  const res = await fetch('/api/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) })
+  if (!res.ok) throw new Error(`Could not switch mode (${res.status})`)
+}

@@ -11,7 +11,7 @@ from typing import Any, AsyncIterator
 
 from PIL import Image
 
-from . import drex, facts as F, ledger, ndi, tradeoffs, voice
+from . import drex, facts as F, ledger, ndi, tradeoffs, vision, voice
 from .agents import budget, deal, goals, owned
 from .agents.base import REGRET_Q, Item, Vote
 from .config import BAND_HIGH, BAND_LOW, FRAMES, VETO_THRESHOLD
@@ -26,7 +26,7 @@ CATEGORIES = {"running_gear": "Running shoes or running apparel", "headphones": 
               "clothing": "Everyday clothing or shoes not for running", "kitchen_drinkware": "Water bottle, mug, cup or kitchenware",
               "bag": "Backpack, bag or luggage", "book": "Book or magazine", "food": "Food, drink or groceries",
               "home": "Furniture or home goods", "other": None}
-BUCKETS = {"under_25": "Less than $25", "25_49": "$25 to $49.99", "50_99": "$50 to $99.99", "100_199": "$100 to $199.99",
+BUCKETS = {"under_5": "Less than $5", "5_24": "$5 to $24.99", "25_49": "$25 to $49.99", "50_99": "$50 to $99.99", "100_199": "$100 to $199.99",
            "200_399": "$200 to $399.99", "400_799": "$400 to $799.99", "800_plus": "$800 or more",
            "non_usd": "A price in a currency other than US dollars", "none": "No price visible"}
 PRICE_SCHEMA = {"type": "object", "properties": {
@@ -36,6 +36,11 @@ PRICE_SCHEMA = {"type": "object", "properties": {
     "was_price": {"type": "number", "description": "The original/'was' price if a crossed-out or 'was' price is shown"}},
     "required": ["price"]}
 FX_TO_USD = {"USD": 1.0, "EUR": 1.08, "GBP": 1.27, "CAD": 0.72, "AUD": 0.65, "INR": 0.012, "JPY": 0.0066, "MXN": 0.055}
+# USD range [lo, hi) per Drex price bucket; "non_usd"/"none" carry no range. under_25 kept for old cached answers.
+BUCKET_RANGE = {"under_5": (0.0, 5.0), "5_24": (5.0, 25.0), "under_25": (0.0, 25.0), "25_49": (25.0, 50.0),
+                "50_99": (50.0, 100.0), "100_199": (100.0, 200.0), "200_399": (200.0, 400.0),
+                "400_799": (400.0, 800.0), "800_plus": (800.0, math.inf)}
+BUCKET_SLACK = 2.0  # "clearly outside" = more than 2x beyond the bucket edge (Drex buckets are coarse)
 
 
 class NeedsInput(Exception):
@@ -80,6 +85,69 @@ def _jpeg_data_url(raw: bytes, max_side: int = 1024) -> tuple[str, bytes]:
     im.save(buf, "JPEG", quality=85)
     b = buf.getvalue()
     return "data:image/jpeg;base64," + base64.b64encode(b).decode(), b
+
+
+VISION_MIN_CONF = 0.35  # below this the VL model's price read is ignored
+
+
+def to_usd(amt: float, cur: str | None) -> tuple[float, str | None]:
+    """(usd, note). Unknown currency → NeedsInput (we never guess an exchange rate)."""
+    cur = str(cur or "USD").upper().strip()[:3]
+    if cur not in FX_TO_USD:
+        raise NeedsInput(f"The tag shows a price in {cur}; type the price in US dollars")
+    if cur == "USD":
+        return float(amt), None
+    return round(float(amt) * FX_TO_USD[cur], 2), f"converted from {float(amt):,.2f} {cur}"
+
+
+def bucket_agrees(price: float, bucket: str | None) -> bool | None:
+    """None when the bucket carries no range; else whether price is not *clearly* outside it."""
+    rng = BUCKET_RANGE.get(bucket or "")
+    if rng is None:
+        return None
+    lo, hi = rng
+    return lo / BUCKET_SLACK <= price <= hi * BUCKET_SLACK
+
+
+def resolve_price(manual: float | None, ndi_read: dict | None, vision_read: dict | None, bucket: str | None,
+                  cache: float | None = None) -> tuple[float, str, str | None]:
+    """Pure price resolution → (usd_price, source, note). Order: manual > NDI > vision > cache, then a sanity
+    check against Drex's price bucket: a read clearly outside the bucket loses to one that agrees; if none
+    agrees, ask the user. Manual prices are never second-guessed."""
+    if manual is not None:
+        return float(manual), "manual", None
+    cands: list[tuple[float, str, str | None]] = []
+    cur_err: NeedsInput | None = None
+    for src, r in (("ndi", ndi_read), ("vision", vision_read)):
+        if not r or not r.get("price"):
+            continue
+        if src == "vision" and float(r.get("confidence") or 0) < VISION_MIN_CONF:
+            continue
+        try:
+            amt = float(r["price"])
+        except (TypeError, ValueError):
+            continue
+        if amt <= 0:
+            continue
+        try:
+            usd, note = to_usd(amt, r.get("currency"))
+        except NeedsInput as e:
+            cur_err = cur_err or e
+            continue
+        cands.append((usd, src, note))
+    if cache is not None:
+        cands.append((float(cache), "cache", None))
+    if not cands:
+        raise cur_err or NeedsInput("I couldn't read a price — type it in the Price box and ask again")
+    if all(bucket_agrees(c[0], bucket) is None for c in cands):
+        return cands[0]
+    for c in cands:
+        if bucket_agrees(c[0], bucket):
+            return c
+    if cache is not None:  # demo frames: the known price beats a coarse bucket
+        return cands[-1]
+    raise NeedsInput(f"I read ${cands[0][0]:,.2f} but the tag looks like {BUCKETS[bucket].lower()} — "
+                     "please type the price")
 
 
 async def perceive(req: dict) -> dict:
@@ -128,7 +196,7 @@ async def perceive(req: dict) -> dict:
         except Exception:  # noqa: BLE001
             return {}
 
-    look_a, tag = await asyncio.gather(look(), read_tag())
+    look_a, tag, seen = await asyncio.gather(look(), read_tag(), vision.read_tag(data_url))  # vision never raises
     if look_a is None:
         cat, cat_p, bucket, present, tag_vis = (demo or {}).get("category", "other"), 0.0, "none", 1.0, 0.0
     else:
@@ -138,28 +206,16 @@ async def perceive(req: dict) -> dict:
     if not demo and present < 0.5 and manual is None:
         raise NeedsInput("I can't see a product in that photo — point the camera at the item (and its price tag)")
 
-    price, src, note = None, None, None
-    if manual is not None:
-        price, src = manual, "manual"
-    elif tag.get("price"):
-        cur = str(tag.get("currency") or "USD").upper().strip()[:3]
-        amt = float(tag["price"])
-        if cur in FX_TO_USD and cur != "USD":
-            price, src, note = round(amt * FX_TO_USD[cur], 2), "ndi", f"converted from {amt:,.2f} {cur}"
-        elif cur in FX_TO_USD:
-            price, src = amt, "ndi"
-        else:
-            raise NeedsInput(f"The tag shows a price in {cur}; type the price in US dollars")
-    elif demo:
-        price, src = demo["price"], "cache"
-    if price is None:
-        raise NeedsInput("I couldn't read a price — type it in the Price box and ask again")
+    price, src, note = resolve_price(manual, tag, seen, bucket, cache=demo["price"] if demo else None)
 
     tag_name = (tag.get("product_name") or "").strip()
+    seen_name = vision.display_name(seen) if seen else ""
     if req.get("item_name"):
         name, name_src = req["item_name"], "manual"
     elif tag_name and len(tag_name) >= 3:
         name, name_src = tag_name, "ndi"
+    elif seen_name and len(seen_name) >= 3:
+        name, name_src = seen_name, "vision"
     elif demo:
         name, name_src = demo["name"], "cache"
     else:
@@ -169,8 +225,11 @@ async def perceive(req: dict) -> dict:
            "ms": round((time.perf_counter() - t) * 1000)}
     if note:
         out["price_note"] = note
-    if tag.get("was_price"):
-        out["was_price"] = tag["was_price"]
+    was = (seen or {}).get("was_price") if src == "vision" else tag.get("was_price")
+    if was:
+        out["was_price"] = was
+    if seen.get("price_text"):
+        out["vision_price_text"] = seen["price_text"]
     return out
 
 
@@ -185,12 +244,31 @@ async def _agent_offer_scan(agent: str, v: Vote, offers: list[tradeoffs.Offer]) 
     return {"agent": agent, "p": {o.id: a[f"if_{o.id}"]["noul"] for o in offers}, "preferred": a["preferred"]["choice"]}
 
 
-async def negotiate(item: Item, votes: dict[str, Vote], weights: dict[str, float]) -> dict:
+async def negotiate(item: Item, votes: dict[str, Vote], weights: dict[str, float], say=None) -> dict:
+    """`say` (optional callback) receives one first-person "say" event per self as soon as its scan lands."""
     t = time.perf_counter()
     dup = votes["owned"].extra.get("p_duplicate", 0) >= 0.5 if "owned" in votes else None
     offs = tradeoffs.offers(item, owns_similar=dup)
-    scans = await asyncio.gather(*(_agent_offer_scan(a, v, offs) for a, v in votes.items()), return_exceptions=True)
-    scans = [s for s in scans if isinstance(s, dict)]
+    scans = []
+    for fut in asyncio.as_completed([_agent_offer_scan(a, v, offs) for a, v in votes.items()]):
+        try:
+            s = await fut
+        except Exception:  # noqa: BLE001  — same as before: a failed scan just drops out
+            continue
+        scans.append(s)
+        if say is not None:
+            a, before = s["agent"], votes[s["agent"]].p_regret
+            o = min(offs, key=lambda o: s["p"][o.id])  # fixed order breaks ties
+            after = s["p"][o.id]
+            ev = {"type": "say", "agent": a, "phase": "negotiate", "offer_id": o.id,
+                  "p_before": round(before, 4), "p_after": round(after, 4)}
+            if before < 0.5:
+                ev["text"] = f"I was already in. “{o.label}” is fine with me too."
+            elif after < 0.5:
+                ev["text"] = f"I'd accept: {o.label} ({before:.2f} → {after:.2f})"
+            else:
+                ev["text"] = "Nothing on the table changes my mind."
+            say(ev)
     by_agent = {s["agent"]: s for s in scans}
     pooled = {}
     for o in offs:  # fixed order; ties keep the earlier offer
@@ -233,6 +311,42 @@ async def run(req: dict) -> AsyncIterator[dict]:
         yield ev
 
 
+_SAY_OPEN = {("budget", "buy"): "I'm fine with it", ("budget", "wait"): "I'm worried",
+             ("goals", "buy"): "No objection from me", ("goals", "wait"): "I object",
+             ("owned", "buy"): "Go ahead", ("owned", "wait"): "Hold on",
+             ("deal", "buy"): "I'm in", ("deal", "wait"): "Not at this price"}
+_SAY_LOWER = {"Fits", "Tight", "Over", "Breaks", "Running", "No", "Within", "Good", "Matches", "Fair", "Not", "We"}
+
+
+def _say(agent: str, text: str, phase: str, **kw) -> dict:
+    return {"type": "say", "agent": agent, "text": text, "phase": phase, **kw}
+
+
+def _say_vote(v: Vote) -> dict:
+    """One first-person debate line per vote — a template over the vote's own fields (no LLM: zero latency)."""
+    quote = (v.citation or {}).get("quote") or None
+    cite = {"quote": quote, "doc_label": (v.citation or {}).get("doc_label")} if quote else {}
+    if v.stance == "abstain":
+        why = ("I can't identify the exact product" if "identify" in v.headline.lower()
+               else "I can't find enough reliable prices online")
+        return _say(v.agent, f"{why}, so I'm sitting this one out.", "vote", stance="abstain", **cite)
+    body = v.headline.strip().rstrip(".")
+    for pre in ("Fits: ", "Tight: "):
+        body = body.removeprefix(pre)
+    body = body.replace("You already own:", "We already own").replace("Your ", "Our ").replace(" your ", " our ")
+    body = body.replace(" — ", ", ").replace(" · ", "; ")
+    first = body.split(" ", 1)[0]
+    if first in _SAY_LOWER:
+        body = body[0].lower() + body[1:]
+    if v.agent == "goals" and body.startswith("breaks"):
+        text = f"This {body}."
+    elif v.agent == "budget" and body.startswith("over by"):
+        text = f"We can't cover it — {body}."
+    else:
+        text = f"{_SAY_OPEN.get((v.agent, v.stance), 'My view')} — {body}."
+    return _say(v.agent, text, "vote", stance=v.stance, p=round(v.p_regret, 4), **cite)
+
+
 async def deliberate(item: Item, snaps: list[dict], t0: float | None = None, speak: bool = True) -> AsyncIterator[dict]:
     """Round one → veto → pool → negotiate → verdict (→ sentence). Used by the live stream and the benchmark."""
     t0 = t0 or time.perf_counter()
@@ -252,6 +366,7 @@ async def deliberate(item: Item, snaps: list[dict], t0: float | None = None, spe
             if v is not None:
                 votes[v.agent] = v
                 yield v.event()
+                yield _say_vote(v)
             else:
                 yield {"type": "agent_error", "agent": name,
                        "message": f"{name.title()} You couldn't vote ({type(err).__name__}) — left out of the pool"}
@@ -277,6 +392,9 @@ async def deliberate(item: Item, snaps: list[dict], t0: float | None = None, spe
         rent = F.persona.rent
         yield {"type": "veto", "agent": "budget", "p": round(pu, 4), "threshold": VETO_THRESHOLD, "fired": veto_fired,
                "reason": f"{rent['payee']} ${rent['amount']:,.0f} on {rent['date']} becomes unpayable" if veto_fired else None}
+        if veto_fired:
+            yield _say("budget", f"Veto. Rent of ${rent['amount']:,.0f} on {rent['date'][5:].replace('-', '/')} would bounce.",
+                       "veto", p=round(pu, 4))
     b = band(p)
     yield {"type": "pool", "p": round(p, 4), "band": b, "weights": {a: round(w, 2) for a, w in weights.items()}}
 
@@ -289,13 +407,31 @@ async def deliberate(item: Item, snaps: list[dict], t0: float | None = None, spe
             b, condition = "wait", "Not affordable this pay cycle — save up for it first"
     elif b != "buy":
         # Any split or "wait" without a veto: ask every self what would change its mind (all Drex calls).
-        neg = await negotiate(item, counted, weights)
+        # Stream each self's answer as its scan lands ("say" lines), then the unchanged negotiation event.
+        said: asyncio.Queue = asyncio.Queue()
+        neg_task = asyncio.create_task(negotiate(item, counted, weights, say=said.put_nowait))
+        while not neg_task.done():
+            getter = asyncio.ensure_future(said.get())
+            done, _ = await asyncio.wait({neg_task, getter}, return_when=asyncio.FIRST_COMPLETED)
+            if getter in done:
+                yield getter.result()
+            else:
+                getter.cancel()
+        while not said.empty():
+            yield said.get_nowait()
+        neg = neg_task.result()
         yield neg
         final_p = neg["chosen"]["p_after"]
         condition = neg["chosen"]["label"]
         b = "buy_with_condition" if neg["chosen"]["resolves"] and final_p < BAND_HIGH else "wait"
+        yield _say("council", f"Agreed: {condition}." if b == "buy_with_condition"
+                   else "No compromise satisfies everyone — wait.", "negotiate")
         if b == "wait":
             condition = f"Best option: {condition}"
+    if veto_fired:
+        yield _say("council", f"Budget's veto stands. {condition}.", "verdict")
+    elif b == "buy":
+        yield _say("council", "No objections. Buy it.", "verdict")
     tally = {"buy": sum(v.stance == "buy" for v in votes.values()), "wait": sum(v.stance == "wait" for v in votes.values()),
              "abstain": sum(v.stance == "abstain" for v in votes.values())}
     verdict = {"type": "verdict", "band": b, "title": TITLES[b], "p": round(final_p, 4), "p_round_one": round(p, 4),

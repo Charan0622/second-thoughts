@@ -34,6 +34,8 @@ def parse_rules(rules: list[str]) -> list[dict]:
 
 def slip_days(price: float) -> int:
     p = F.persona
+    if not p.has_goal:
+        return 0
     return round(price / max(p.japan_monthly, 1) * 30.4)
 
 
@@ -69,6 +71,8 @@ def computed(item: Item, extra: str | None = None) -> list[str]:
     p = F.persona
     remaining = p.japan_target - p.japan_saved
     g = p.goal_short
+    if not p.has_goal:
+        return ["The buyer has no savings goal on file, so no goal can slip."] + rule_lines(item) + ([extra] if extra else [])
     out = [f"{p.goal_name}: ${p.japan_saved:,.0f} of ${p.japan_target:,.0f}; ${remaining:,.0f} to go at ${p.japan_monthly:,.0f}/month "
            f"= {remaining / p.japan_monthly:.1f} months.",
            f"If this ${item.price:,.0f} came out of the {g} savings plan, the goal would slip about {slip_days(item.price)} days."]

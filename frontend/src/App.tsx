@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import {
-  fetchDemoItems, fetchHealth, fetchPersona, streamVerdict,
+  fetchDemoItems, fetchHealth, fetchPersona, setPersonaMode, streamVerdict,
   type AgentId, type DemoItem, type DemoItemId, type NegotiationEvent, type PerceiveEvent, type Persona,
   type PoolEvent, type SentenceEvent, type VerdictEvent, type VerdictRequest, type VerdictStreamEvent,
   type VetoEvent, type VoteEvent,
@@ -14,6 +14,9 @@ import Landing from './Landing'
 import Ledger from './Ledger'
 import PhoneLink from './PhoneLink'
 import DocsPanel from './DocsPanel'
+import Onboarding from './Onboarding'
+import Debate, { DEBATE_STEP_MS } from './Debate'
+import type { SayEvent } from './api'
 
 export type Phase = 'idle' | 'perceiving' | 'council' | 'pooled' | 'done' | 'error'
 
@@ -27,6 +30,7 @@ export interface RunState {
   negotiation?: NegotiationEvent
   verdict?: VerdictEvent
   sentence?: SentenceEvent
+  debate?: SayEvent[]
   error?: string
 }
 
@@ -49,6 +53,7 @@ function reducer(s: RunState, a: Action): RunState {
     case 'negotiation': return { ...s, negotiation: ev }
     case 'verdict': return { ...s, verdict: ev, phase: 'done' }
     case 'sentence': return { ...s, sentence: ev }
+    case 'say': return { ...s, debate: [...(s.debate ?? []), ev] }
     case 'done': return s.phase === 'done' ? s : { ...s, phase: 'done' }
     case 'error': return { ...s, phase: s.verdict ? 'done' : 'error', error: ev.message }
     case 'agent_error': return s
@@ -66,7 +71,9 @@ export default function App() {
   const [mock, setMock] = useState<boolean>(forceMock)
   const [items, setItems] = useState<DemoItem[]>(MOCK_DEMO_ITEMS)
   const [persona, setPersona] = useState<Persona | null>(null)
-  const [demoMode, setDemoMode] = useState(true)
+  const [demoMode, setDemoMode] = useState(false)  // demo items are an opt-in example (demo persona only)
+  const [docsOpen, setDocsOpen] = useState(0)
+  const [switching, setSwitching] = useState(false)
   const [selected, setSelected] = useState<DemoItemId>('headphones')
   const [manualPrice, setManualPrice] = useState('')
   const [muted, setMuted] = useState(false)
@@ -80,6 +87,8 @@ export default function App() {
   const captureRef = useRef<(() => void) | null>(null)
   const mutedRef = useRef(muted)
   mutedRef.current = muted
+  const needsChoiceRef = useRef(false)
+  needsChoiceRef.current = !forceMock && !mock && persona?.mode === 'none'
 
   const toast = useCallback((text: string) => {
     const id = Date.now() + Math.random()
@@ -118,6 +127,7 @@ export default function App() {
   }, [])
 
   const run = useCallback(async (req: VerdictRequest) => {
+    if (needsChoiceRef.current) { toast('Choose your documents or the demo persona first'); return }
     abortRef.current?.abort()
     const ctl = new AbortController()
     abortRef.current = ctl
@@ -146,6 +156,26 @@ export default function App() {
     }
   }, [mock, speak, toast])
 
+  // Persona mode: whose documents the council uses. Mock mode always behaves like the demo persona.
+  const mode = mock ? 'demo' : persona ? (persona.mode ?? 'demo') : null
+  const examples = mode === 'demo'
+  const needsChoice = mode === 'none'
+  const camDemo = demoMode && examples
+  const refreshPersona = useCallback(() => { fetchPersona().then(setPersona).catch(() => {}) }, [])
+  const chooseDemo = useCallback(async () => {
+    if (mock) return
+    setSwitching(true)
+    try {
+      await setPersonaMode('demo')
+      needsChoiceRef.current = false
+      setPersona(await fetchPersona())
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSwitching(false)
+    }
+  }, [mock, toast])
+
   const parsedPrice = (() => {
     const n = parseFloat(manualPrice.replace(/[$,\s]/g, ''))
     return Number.isFinite(n) && n > 0 ? n : null
@@ -164,9 +194,9 @@ export default function App() {
 
   const ask = useCallback(() => {
     if (busy) return
-    if (demoMode) runDemo(selected)
+    if (camDemo) runDemo(selected)
     else captureRef.current?.()
-  }, [busy, demoMode, runDemo, selected])
+  }, [busy, camDemo, runDemo, selected])
 
   // Picking a different item returns to the quiet "desire" state until asked.
   const choose = useCallback((id: DemoItemId) => {
@@ -187,8 +217,8 @@ export default function App() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || e.metaKey || e.ctrlKey) return
       if (tag === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return
       const idx = ['1', '2', '3'].indexOf(e.key)
-      if (idx >= 0 && demoMode) { e.preventDefault(); runDemo(DEMO_IDS[idx]) }
-      if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && demoMode) {
+      if (idx >= 0 && examples) { e.preventDefault(); setDemoMode(true); runDemo(DEMO_IDS[idx]) }  // presenter backup
+      if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && camDemo) {
         const cur = DEMO_IDS.indexOf(selected)
         runDemo(DEMO_IDS[(cur + (e.key === 'ArrowRight' ? 1 : 2)) % 3])
       }
@@ -196,16 +226,20 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [demoMode, runDemo, selected, ask, view])
+  }, [examples, camDemo, runDemo, selected, ask, view])
 
-  // ?run=shoes|headphones|macmini auto-starts a demo once live/mock is decided.
+  // ?run=shoes|headphones|macmini (presenter backup) switches to the demo persona and auto-starts a demo item.
   const autoRan = useRef(false)
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('run') as DemoItemId | null
-    if (!ready || autoRan.current || !id || !DEMO_IDS.includes(id)) return
+    if (!ready || !mode || autoRan.current || !id || !DEMO_IDS.includes(id)) return
     autoRan.current = true
-    runDemo(id)
-  }, [ready, runDemo])
+    ;(async () => {
+      if (mode !== 'demo') await chooseDemo()
+      setDemoMode(true)
+      runDemo(id)
+    })()
+  }, [ready, mode, chooseDemo, runDemo])
 
   useEffect(() => {
     if (muted && 'speechSynthesis' in window) window.speechSynthesis.cancel()
@@ -215,15 +249,16 @@ export default function App() {
   // A timer, not an animation dependency: the verdict is already in state and in "How they decided".
   const verdictRun = state.verdict ? state.runId : null
   const negotiated = !!state.negotiation
+  const debateLen = state.debate?.length ?? 0
   useEffect(() => {
     if (verdictRun == null) return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const t = setTimeout(() => {
       setClarity(true)
       document.querySelector('.arena')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
-    }, reduce ? 0 : negotiated ? 1700 : 900)
+    }, reduce ? 0 : Math.max(negotiated ? 1700 : 900, debateLen * DEBATE_STEP_MS + 1200))  // let the debate finish on screen
     return () => clearTimeout(t)
-  }, [verdictRun, negotiated])
+  }, [verdictRun, negotiated, debateLen])
 
   const stage = state.verdict ? 'resolved'
     : state.negotiation ? 'negotiating'
@@ -238,7 +273,7 @@ export default function App() {
       <MotionConfig reducedMotion="user">
         <Landing item={item} mock={mock}
           onStart={() => setView('app')}
-          onDemo={() => { setView('app'); runDemo(selected) }} />
+          onDemo={() => { setView('app'); void chooseDemo() }} />
       </MotionConfig>
     )
   }
@@ -250,8 +285,8 @@ export default function App() {
           <button className="wordmark" onClick={() => { abortRef.current?.abort(); setView('landing'); dispatch({ kind: 'clear' }); setClarity(false) }} aria-label="Second Thoughts: back to start">
             <span className="brand-mark" aria-hidden><i /><i /></span>Second Thoughts
           </button>
-          <PersonaLine persona={persona} />
-          <DocsPanel onChange={() => { fetchPersona().then(setPersona).catch(() => {}) }} />
+          <PersonaLine persona={persona} mode={mode} />
+          <DocsPanel openSignal={docsOpen} onChange={refreshPersona} />
           <PhoneLink runId={state.runId} onFrame={(frame, price) => run({ demo_item: null, frame, price: price ?? parsedPrice, item_name: null })} />
           <span className={`source ${mock ? 'source-mock' : 'source-live'}`} title={mock ? 'Backend not reachable: replaying recorded fixture events' : 'Connected to the live backend'}>
             {mock ? 'Mock fixtures' : 'Live'}
@@ -260,8 +295,12 @@ export default function App() {
 
         <main className="arena" data-act={stage}>
           <Council state={state} persona={persona} onInspect={setInspect} inspecting={inspect} />
-          <Camera
-            demoMode={demoMode}
+          {needsChoice ? (
+            <Onboarding busy={switching} onUpload={() => setDocsOpen((n) => n + 1)} onDemo={() => void chooseDemo()} />
+          ) : <Camera
+            demoMode={camDemo}
+            examples={examples}
+            onError={toast}
             setDemoMode={setDemoMode}
             items={items}
             selected={selected}
@@ -275,7 +314,8 @@ export default function App() {
             perceive={state.perceive}
             busy={busy}
             resolved={!!state.verdict}
-          />
+          />}
+          <Debate key={state.runId} lines={state.debate ?? []} docked={!clarity} />
           {state.negotiation && !state.verdict && (
             <motion.p className="act-note" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
               Negotiating · {state.negotiation.chosen.label}
@@ -314,20 +354,25 @@ export default function App() {
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 
-function PersonaLine({ persona }: { persona: Persona | null }) {
+function PersonaLine({ persona, mode }: { persona: Persona | null; mode: Persona['mode'] | null }) {
   if (!persona) return <div className="persona persona-loading">Loading persona…</div>
-  const pct = Math.min(1, persona.japan.saved / persona.japan.target)
+  if (mode === 'none') return <div className="persona persona-loading">No documents yet — upload yours or try the demo persona</div>
+  const hasGoal = persona.has_goal ?? persona.japan.target > 0
+  const pct = hasGoal ? Math.min(1, persona.japan.saved / persona.japan.target) : 0
   const payday = new Date(persona.next_payday + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const goal = persona.goal_short ? `${persona.goal_short.charAt(0).toUpperCase()}${persona.goal_short.slice(1)} fund` : 'Japan fund'
   return (
     <dl className="persona" aria-label={`${persona.name}'s situation`}>
-      <div className="persona-who"><dt className="sr">Person</dt><dd>{persona.name}</dd></div>
+      <div className="persona-who"><dt className="sr">Person</dt><dd>{persona.name}{mode === 'mine' ? <span> · your documents</span> : null}</dd></div>
       <div><dt>Free before payday</dt><dd>{usd(persona.free_cash)}</dd></div>
       <div><dt>Payday</dt><dd>{payday}</dd></div>
-      <div className="persona-japan">
-        <dt>Japan fund</dt>
-        <dd>{usd(persona.japan.saved)}<span> / {usd(persona.japan.target)}</span></dd>
-        <span className="meter" aria-hidden><span style={{ width: `${pct * 100}%` }} /></span>
-      </div>
+      {hasGoal ? (
+        <div className="persona-japan">
+          <dt>{goal}</dt>
+          <dd>{usd(persona.japan.saved)}<span> / {usd(persona.japan.target)}</span></dd>
+          <span className="meter" aria-hidden><span style={{ width: `${pct * 100}%` }} /></span>
+        </div>
+      ) : <div><dt>Savings goal</dt><dd><span>none on file</span></dd></div>}
     </dl>
   )
 }

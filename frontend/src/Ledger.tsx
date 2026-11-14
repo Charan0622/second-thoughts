@@ -9,7 +9,6 @@ const ROWS: { key: string; label: string; what: string }[] = [
   { key: 'keenable', label: 'Keenable', what: 'live prices' },
   { key: 'deepinfra', label: 'DeepInfra', what: 'verdict sentence' },
   { key: 'intern', label: 'Intern', what: 'the Clerk' },
-  { key: 'adobe', label: 'Adobe', what: 'avatars · slides' },
 ]
 
 const fmtMs = (ms?: number | null) => (ms == null ? '—' : ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`)

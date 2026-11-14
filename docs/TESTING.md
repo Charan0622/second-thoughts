@@ -15,8 +15,21 @@ cd frontend && npm run dev                                 # open http://localho
 Backend check: `curl localhost:8000/api/health` should return `{"ok":true,"facts_loaded":true,"errors":{}}`.
 If the UI shows a **MOCK** badge, it can't reach the backend.
 
-## 2 · Demo mode (the pitch path)
-Demo mode is on by default. Press **1 / 2 / 3** (or click the buttons):
+## 1b · First visit: choose whose documents
+A fresh install (no `data/private/mode.json`) is in persona mode **none**. Open the app and the camera is replaced by **"Whose money is this?"**:
+- **📄 Upload your documents** opens the documents panel. The first upload switches to mode **mine**: only your files are used. Each slot you skip says *not uploaded* and shows up as a warning (for example "No pay stub uploaded — payday unknown (assuming …, 14 days from today)"). Maya's numbers are never used in its place.
+- **Try the demo persona (Maya)** switches to mode **demo**: Maya's documents, exactly as before.
+- Until you choose, nothing runs. `/api/verdict` answers with the error "Choose your documents or the demo persona first", and the header reads "No documents yet".
+- **Remove my documents** (in the documents panel) deletes every upload and goes back to onboarding.
+- Reset from a terminal: `rm data/private/mode.json` (back to onboarding), or `curl -X POST localhost:8000/api/mode -H 'Content-Type: application/json' -d '{"mode":"demo"}'`.
+- Rules accept text, PDF, DOCX or a photo of a note. Audio uploads are rejected.
+
+Checks for mode **mine**:
+- [ ] Upload only a bank statement. The header shows its name and free cash. The panel lists the other four slots as *not uploaded*, each with a flag.
+- [ ] Ask about an item. All four selves still vote. Goals You says it has no goal or rules on file, and Already-Own-It You has no receipts.
+
+## 2 · Demo persona (the pitch path)
+Choose **Try the demo persona (Maya)**, or open `?run=…`, which switches to the demo persona for you. The main entry is now **📷 Upload a photo of what you want to buy** (or the live camera, or 📱 Connect phone). The three demo items sit behind the small **or try an example** link, and **1 / 2 / 3** run them directly as a presenter backup. Both appear only for the demo persona.
 
 | Key | Item | You should see |
 |---|---|---|
@@ -32,10 +45,11 @@ Check on each run:
 - [ ] After item 2, **Ask the Clerk** shows Intern's paragraph in ~4–30 s
 - [ ] The tool ledger (bottom left) counts up
 
-Pitch shortcut: `http://localhost:5173/?run=headphones` (or `shoes` / `macmini`) starts a run on page load.
+Pitch shortcut: `http://localhost:5173/?run=headphones` (or `shoes` / `macmini`) switches to the demo persona and starts a run on page load.
 
-## 3 · Live webcam
-1. Switch **Demo mode** off and allow camera access when Chrome asks. localhost is allowed.
+## 3 · Upload a photo / live webcam
+- **📷 Upload a photo of what you want to buy**: pick any image. It is downscaled to ≤ 1280 px JPEG in the browser and sent exactly like a webcam capture (`{frame, price}`).
+1. The live camera starts automatically. Allow camera access when Chrome asks; localhost is allowed.
 2. Point the camera at a product with a visible price tag. Holding a phone showing one of the `data/demo_frames/price_tag_*.jpg` images also works.
 3. Click **Capture & ask**.
    - Drex Max reads the category and price range (~0.3 s). NDI then reads the exact price (**~5 s for a new frame**) before the council runs.
@@ -55,14 +69,14 @@ Take the photo with a phone instead of the laptop webcam. The laptop runs the co
 - Check from the laptop: `curl -s localhost:8000/api/phone/info` returns the URL the QR encodes.
 
 ## 4 · Frontend without a backend
-`http://localhost:5173/?mock=1` replays all three flows with no keys and no network.
+`http://localhost:5173/?mock=1` replays all three flows with no keys and no network. Mock mode always behaves as the demo persona: there's no onboarding, **or try an example** and 1/2/3 work, and an uploaded photo replays the headphones flow.
 
 ## 5 · Backend checks
 ```bash
 cd backend
-uv run pytest tests -q                                    # 12 offline tests (council math, trade-offs)
+uv run pytest tests -q                                    # offline tests (council math, trade-offs, persona modes)
 curl -sN -X POST localhost:8000/api/verdict -H 'Content-Type: application/json' -d '{"demo_item":"macmini"}'
-                                                          # watch the NDJSON events stream in
+                                                          # watch the NDJSON events stream in (needs mode demo, see 1b)
 curl -s localhost:8000/api/ledger                         # per-tool usage
 uv run python bench/run_bench.py --limit 5                # quick benchmark (full: ~5 min, ~$0.20)
 ```
