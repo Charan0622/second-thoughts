@@ -9,6 +9,7 @@ dependencies = [
     "keenable>=0.1.5",
     "nace-sdk>=0.8.0",
     "pillow>=13.0.0",
+    "pillow-heif>=1.8.1",
     "pydantic>=2.14.3",
     "pypdfium2>=5.15.2",
     "python-dotenv>=1.2.4",

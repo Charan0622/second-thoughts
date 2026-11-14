@@ -14,6 +14,7 @@ import Landing from './Landing'
 import Ledger from './Ledger'
 import PhoneLink from './PhoneLink'
 import DocsPanel from './DocsPanel'
+import PriceConfirm, { type ConfirmPriceEvent } from './PriceConfirm'
 import Onboarding from './Onboarding'
 import Debate, { DEBATE_STEP_MS } from './Debate'
 import type { SayEvent } from './api'
@@ -87,6 +88,8 @@ export default function App() {
   const captureRef = useRef<(() => void) | null>(null)
   const mutedRef = useRef(muted)
   mutedRef.current = muted
+  const [confirmEv, setConfirmEv] = useState<ConfirmPriceEvent | null>(null)
+  const lastReqRef = useRef<VerdictRequest | null>(null)
   const needsChoiceRef = useRef(false)
   needsChoiceRef.current = !forceMock && !mock && persona?.mode === 'none'
 
@@ -128,6 +131,7 @@ export default function App() {
 
   const run = useCallback(async (req: VerdictRequest) => {
     if (needsChoiceRef.current) { toast('Choose your documents or the demo persona first'); return }
+    lastReqRef.current = req
     abortRef.current?.abort()
     const ctl = new AbortController()
     abortRef.current = ctl
@@ -143,6 +147,7 @@ export default function App() {
         if (ctl.signal.aborted) return
         dispatch({ kind: 'event', ev })
         if (ev.type === 'error' || ev.type === 'agent_error') toast(ev.message)
+        if ((ev as { type: string }).type === 'confirm_price') { setConfirmEv(ev as unknown as ConfirmPriceEvent); dispatch({ kind: 'clear' }) }
         if (ev.type === 'sentence') speak(ev.text)
       }
     } catch (e) {
@@ -286,6 +291,8 @@ export default function App() {
             <span className="brand-mark" aria-hidden><i /><i /></span>Second Thoughts
           </button>
           <PersonaLine persona={persona} mode={mode} />
+          <PriceConfirm ev={confirmEv} onCancel={() => setConfirmEv(null)}
+            onConfirm={(price, name) => { setConfirmEv(null); const r = lastReqRef.current; if (r) void run({ ...r, price, item_name: name }) }} />
           <DocsPanel openSignal={docsOpen} onChange={refreshPersona} />
           <PhoneLink ready={!needsChoice} runId={state.runId} onFrame={(frame, price) => run({ demo_item: null, frame, price: price ?? parsedPrice, item_name: null })} />
           <span className={`source ${mock ? 'source-mock' : 'source-live'}`} title={mock ? 'Backend not reachable: replaying recorded fixture events' : 'Connected to the live backend'}>

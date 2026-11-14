@@ -53,7 +53,15 @@ function downscaleFile(file: File, max = 1280): Promise<string> {
       URL.revokeObjectURL(src)
       resolve(c.toDataURL('image/jpeg', 0.85))
     }
-    img.onerror = () => { URL.revokeObjectURL(src); reject(new Error('This browser can’t read that image — try a JPEG or PNG')) }
+    img.onerror = () => {
+      URL.revokeObjectURL(src)
+      // e.g. HEIC from an iPhone or a macOS screenshot: send the original bytes; the server converts them
+      if (file.size > 12 * 1024 * 1024) { reject(new Error('That photo is too large — try a smaller one')); return }
+      const fr = new FileReader()
+      fr.onload = () => resolve(String(fr.result))
+      fr.onerror = () => reject(new Error('Could not read that file'))
+      fr.readAsDataURL(file)
+    }
     img.src = src
   })
 }
@@ -67,7 +75,7 @@ export default function Camera(p: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [camError, setCamError] = useState<string | null>(null)
   // Camera picker: lets an iPhone (macOS Continuity Camera) or any USB/virtual camera be the eye.
-  const [cams, setCams] = useState<MediaDeviceInfo[]>([])
+  const [, setCams] = useState<MediaDeviceInfo[]>([])
   const [camId, setCamId] = useState<string>(() => { try { return localStorage.getItem('st-cam') ?? '' } catch { return '' } })
   const [still, setStill] = useState<string | null>(null)
 
@@ -189,15 +197,6 @@ export default function Camera(p: Props) {
             ))}
           </div>
         ) : null}
-        {!p.demoMode && cams.length > 1 && (
-          <label className="override cam-pick">
-            <span>Camera</span>
-            <select value={camId} onChange={(e) => { setCamId(e.target.value); try { localStorage.setItem('st-cam', e.target.value) } catch { /* ignore */ } }}>
-              <option value="">Default</option>
-              {cams.map((c, i) => <option key={c.deviceId || i} value={c.deviceId}>{c.label || `Camera ${i + 1}`}</option>)}
-            </select>
-          </label>
-        )}
         <div className="pick-row">
           {p.examples ? (
             <button className="link" onClick={() => { p.setDemoMode(!p.demoMode); setStill(null) }} disabled={p.busy}>

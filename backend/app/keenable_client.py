@@ -63,7 +63,7 @@ def _parse(resp, item_price: float | None) -> dict:
 JUNK_CTX = re.compile(r"(off|save|saving|discount|increase|gst|vat|/\s?mo|per month|a month|monthly|shipping|coupon|credit)", re.I)
 
 
-def prices_near(text: str, item_price: float) -> list[float]:
+def prices_near(text: str, item_price: float | None) -> list[float]:
     """Dollar amounts in `text` that look like a selling price for this item (not a discount, fee or plan)."""
     out = []
     for m in PRICE.finditer(text):
@@ -71,7 +71,7 @@ def prices_near(text: str, item_price: float) -> list[float]:
         if JUNK_CTX.search(ctx):
             continue
         v = float(m.group(1).replace(",", ""))
-        if 0.5 * item_price <= v <= 1.5 * item_price:
+        if item_price is None or 0.5 * item_price <= v <= 1.5 * item_price:
             out.append(v)
     return out
 

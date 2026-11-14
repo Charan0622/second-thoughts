@@ -5,7 +5,7 @@ import type { RunState } from './App'
 
 export const AGENT_META: Record<AgentId, { label: string; short: string; question: string; reads: string }> = {
   budget: { label: 'Budget You', short: 'Budget', question: 'Can I afford it?', reads: 'bank statement and pay stub' },
-  goals: { label: 'Goals You', short: 'Goals', question: 'What does it cost my future?', reads: 'savings tracker and rules memo' },
+  goals: { label: 'Goals You', short: 'Goals', question: 'What does it cost my future?', reads: 'savings goal and your rules' },
   owned: { label: 'Already-Own-It You', short: 'Already own it', question: 'Do I have one already?', reads: 'receipts' },
   deal: { label: 'Deal You', short: 'Deal', question: 'Is this the right price?', reads: 'live price search' },
 }
