@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -34,8 +35,15 @@ async def extract(path: Path | None, schema: dict, *, data: bytes | None = None,
     rec_ok, cost = False, 0.0
     try:
         async with AsyncNaceClient(api_key=NACE_API_KEY) as c:
-            up = await c.documents.upload(raw if data is not None else path, file_name=name or (path.name if path else "upload.jpg"),
-                                          path=f"second-thoughts/{k}-{name or path.name}", on_conflict="new_version")
+            up = None
+            for attempt in range(3):  # the console occasionally answers bursts with a 403 bot challenge; back off and retry
+                try:
+                    up = await _upload(c, raw, data, path, name, k)
+                    break
+                except Exception as e:  # noqa: BLE001
+                    if "challenge" not in str(e).lower() or attempt == 2:
+                        raise
+                    await asyncio.sleep(2.0 * (attempt + 1))
             opts: dict[str, Any] = {"schema": schema, "citations": {"enabled": True, "include_source_text": True}, "wait_seconds": 60}
             if instructions:
                 opts["instructions"] = instructions
@@ -56,6 +64,11 @@ async def extract(path: Path | None, schema: dict, *, data: bytes | None = None,
                       note=f"extract {name or (path.name if path else '')}")
     cp.write_text(json.dumps(result))
     return result
+
+
+async def _upload(c, raw, data, path, name, k):
+    return await c.documents.upload(raw if data is not None else path, file_name=name or (path.name if path else "upload.jpg"),
+                                    path=f"second-thoughts/{k}-{name or path.name}", on_conflict="new_version")
 
 
 _TAG = re.compile(r"<[^>]+>")

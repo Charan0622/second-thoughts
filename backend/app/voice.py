@@ -29,12 +29,14 @@ async def sentence(verdict: dict, votes: dict) -> dict:
     if not DEEPINFRA_API_KEY:
         return {"type": "sentence", "text": fallback, "source": "template"}
     lines = [f"- {v.label}: {'BUY' if v.stance == 'buy' else 'WAIT'} — {v.headline}" for v in votes.values()]
-    prompt = (f"Maya is about to buy {verdict['item']['name']} for ${verdict['item']['price']:,.0f}. "
+    from . import facts as F
+    n = F.persona.first_name
+    prompt = (f"{n} is about to buy {verdict['item']['name']} for ${verdict['item']['price']:,.0f}. "
               f"Her spending council decided: {verdict['title']}"
               + (f" (condition: {verdict['condition']})" if verdict.get("condition") else "")
               + ". Votes:\n" + "\n".join(lines)
               + f"\n\nThere are exactly {len(votes)} selves; if you mention them, use their names exactly as written above. "
-                "Write ONE warm, plain-English sentence (max 30 words) speaking directly to Maya that explains the verdict. "
+                f"Write ONE warm, plain-English sentence (max 30 words) speaking directly to {n} that explains the verdict. "
                 "Use only the facts above; do not invent numbers or voices. No preamble, no quotes.")
     t = time.perf_counter()
     ok = False

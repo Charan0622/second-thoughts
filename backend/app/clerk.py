@@ -79,10 +79,11 @@ async def explain(verdict: dict, votes: list[dict]) -> dict:
     lines = "\n".join(f"- {v['label']}: {v['stance'].upper()} (p_regret {v['p_regret']:.2f}, stake {v['stake']:.1f}) — "
                       f"{v['headline']} [cites: {v['citation'].get('doc_label')}: {v['citation'].get('quote', '')[:120]}]"
                       for v in votes)
+    from . import facts as F
     prompt = (f"You are the Clerk of a spending council. The council's verdict on {verdict['item']['name']} "
               f"(${verdict['item']['price']:,.0f}) was '{verdict['title']}'"
               + (f" with condition '{verdict['condition']}'" if verdict.get("condition") else "")
-              + f". Votes:\n{lines}\n\nWrite one short paragraph (max 80 words) for Maya explaining why the selves disagreed "
+              + f". Votes:\n{lines}\n\nWrite one short paragraph (max 80 words) for {F.persona.first_name} explaining why the selves disagreed "
                 "and why the condition resolves it. Only use the facts given. Reply with the paragraph only; do not create files.")
     # Key on what decides the paragraph (item, verdict, condition, each self's stance + headline) — not on the
     # probabilities, which wobble in the 2nd decimal between runs.
@@ -96,5 +97,7 @@ async def explain(verdict: dict, votes: list[dict]) -> dict:
     if res.get("ok") and res.get("text"):
         cache = json.loads(CACHE.read_text()) if CACHE.exists() else {}
         cache[key] = res["text"]
-        CACHE.write_text(json.dumps(cache, indent=1))
+        tmp = CACHE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cache, indent=1))
+        os.replace(tmp, CACHE)
     return res

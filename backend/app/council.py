@@ -23,12 +23,23 @@ DEMO_ITEMS = {
 }
 CATEGORIES = {"running_gear": "Running shoes or running apparel", "headphones": "Headphones or earbuds",
               "computer": "Desktop or laptop computer", "gadget": "Other consumer electronics (phone, watch, tablet, camera)",
-              "clothing": "Everyday clothing or shoes not for running", "other": None}
-BUCKETS = {"under_100": "Less than $100", "100_199": "$100 to $199.99", "200_399": "$200 to $399.99",
-           "400_799": "$400 to $799.99", "800_plus": "$800 or more", "none": "No price visible"}
-BUCKET_MID = {"under_100": 60.0, "100_199": 150.0, "200_399": 300.0, "400_799": 600.0, "800_plus": 1000.0}
-PRICE_SCHEMA = {"type": "object", "properties": {"product_name": {"type": "string", "description": "Product name on the tag or packaging"},
-                                                  "price": {"type": "number", "description": "Price in USD"}}, "required": ["price"]}
+              "clothing": "Everyday clothing or shoes not for running", "kitchen_drinkware": "Water bottle, mug, cup or kitchenware",
+              "bag": "Backpack, bag or luggage", "book": "Book or magazine", "food": "Food, drink or groceries",
+              "home": "Furniture or home goods", "other": None}
+BUCKETS = {"under_25": "Less than $25", "25_49": "$25 to $49.99", "50_99": "$50 to $99.99", "100_199": "$100 to $199.99",
+           "200_399": "$200 to $399.99", "400_799": "$400 to $799.99", "800_plus": "$800 or more",
+           "non_usd": "A price in a currency other than US dollars", "none": "No price visible"}
+PRICE_SCHEMA = {"type": "object", "properties": {
+    "product_name": {"type": "string", "description": "Brand and model of the product on the tag or packaging"},
+    "price": {"type": "number", "description": "The current selling price as a number (the 'now'/sale price if two are shown)"},
+    "currency": {"type": "string", "description": "ISO currency code of that price, e.g. USD, EUR, GBP"},
+    "was_price": {"type": "number", "description": "The original/'was' price if a crossed-out or 'was' price is shown"}},
+    "required": ["price"]}
+FX_TO_USD = {"USD": 1.0, "EUR": 1.08, "GBP": 1.27, "CAD": 0.72, "AUD": 0.65, "INR": 0.012, "JPY": 0.0066, "MXN": 0.055}
+
+
+class NeedsInput(Exception):
+    """Perception couldn't establish something we refuse to guess (price, or that there is an item at all)."""
 AGENTS = ["budget", "goals", "owned", "deal"]
 
 
@@ -53,7 +64,11 @@ TITLES = {"buy": "Buy it", "buy_with_condition": "Buy — with a condition", "wa
 
 def price_terms(item: Item) -> dict:
     p = F.persona
-    return {"hours_of_work": round(item.price / p.hourly, 1), "japan_slip_days": goals.slip_days(item.price),
+    fits = item.price <= p.free_cash
+    return {"hours_of_work": round(item.price / p.net_hourly, 1),            # take-home pay, not gross
+            "japan_slip_days": 0 if fits else goals.slip_days(item.price - max(p.free_cash, 0)),
+            "japan_slip_if_from_savings": goals.slip_days(item.price),
+            "goal_name": p.goal_short,
             "pct_free_cash": round(item.price / p.free_cash * 100) if p.free_cash > 0 else None}
 
 
@@ -70,43 +85,93 @@ def _jpeg_data_url(raw: bytes, max_side: int = 1024) -> tuple[str, bytes]:
 async def perceive(req: dict) -> dict:
     t = time.perf_counter()
     demo = DEMO_ITEMS.get(req.get("demo_item") or "")
+    if req.get("demo_item") and not demo:
+        raise NeedsInput(f"Unknown demo item '{req.get('demo_item')}'")
     if demo:
         raw = (FRAMES / demo["frame"]).read_bytes()
     elif req.get("frame"):
-        raw = base64.b64decode(req["frame"].split(",", 1)[-1])
+        try:
+            raw = base64.b64decode(req["frame"].split(",", 1)[-1], validate=False)
+        except Exception as e:  # noqa: BLE001
+            raise NeedsInput("That frame isn't a valid image") from e
     else:
-        raise ValueError("send demo_item or frame")
-    data_url, jpeg = _jpeg_data_url(raw)
+        raise NeedsInput("Send a demo item or a camera frame")
+    try:
+        data_url, jpeg = _jpeg_data_url(raw)
+    except Exception as e:  # noqa: BLE001
+        raise NeedsInput("That frame isn't a readable image (JPEG/PNG/WebP)") from e
+    manual = req.get("price")
+    if manual is not None:
+        try:
+            manual = float(manual)
+        except (TypeError, ValueError):
+            raise NeedsInput("Price must be a number") from None
+        if manual <= 0:
+            raise NeedsInput("Price must be greater than $0")
 
     async def look():
-        res = await drex.ask("Image 1 shows something Maya is about to buy.", {
-            "category": drex.choice("What kind of item is shown in Image 1?", CATEGORIES),
-            "price_bucket": drex.choice("What price is shown for the item in Image 1?", BUCKETS)},
-            images=[data_url], note="perceive")
-        return res["answers"]
-
-    async def read_price():
         try:
-            r = await ndi.extract(None, PRICE_SCHEMA, data=jpeg, name="frame.jpg")
+            res = await drex.ask("Image 1 shows something the buyer may be about to buy.", {
+                "item_present": drex.noul("Does Image 1 show a specific product someone could buy (not an empty scene)?"),
+                "tag_visible": drex.noul("Is a price tag, price label or on-screen price visible in Image 1?"),
+                "category": drex.choice("What kind of item is shown in Image 1?", CATEGORIES),
+                "price_bucket": drex.choice("What price is shown for the item in Image 1?", BUCKETS)},
+                images=[data_url], note="perceive")
+            return res["answers"]
+        except Exception:  # noqa: BLE001  — fall back to manual category rather than crash the stream
+            return None
+
+    async def read_tag():  # always run: it gives the product NAME even when the price is typed in
+        try:
+            r = await asyncio.wait_for(ndi.extract(None, PRICE_SCHEMA, data=jpeg, name="frame.jpg"), 8)
             return r.get("data") or {}
         except Exception:  # noqa: BLE001
             return {}
 
-    need_ndi = req.get("price") is None
-    look_a, price_d = await asyncio.gather(look(), read_price() if need_ndi else asyncio.sleep(0, {}))
-    cat = look_a["category"]["choice"]
-    bucket = look_a["price_bucket"]["choice"]
-    if req.get("price") is not None:
-        price, src = float(req["price"]), "manual"
-    elif price_d.get("price"):
-        price, src = float(price_d["price"]), "ndi"
+    look_a, tag = await asyncio.gather(look(), read_tag())
+    if look_a is None:
+        cat, cat_p, bucket, present, tag_vis = (demo or {}).get("category", "other"), 0.0, "none", 1.0, 0.0
+    else:
+        cat, cat_p = look_a["category"]["choice"], look_a["category"]["confidence"]
+        bucket = look_a["price_bucket"]["choice"]
+        present, tag_vis = look_a["item_present"]["noul"], look_a["tag_visible"]["noul"]
+    if not demo and present < 0.5 and manual is None:
+        raise NeedsInput("I can't see a product in that photo — point the camera at the item (and its price tag)")
+
+    price, src, note = None, None, None
+    if manual is not None:
+        price, src = manual, "manual"
+    elif tag.get("price"):
+        cur = str(tag.get("currency") or "USD").upper().strip()[:3]
+        amt = float(tag["price"])
+        if cur in FX_TO_USD and cur != "USD":
+            price, src, note = round(amt * FX_TO_USD[cur], 2), "ndi", f"converted from {amt:,.2f} {cur}"
+        elif cur in FX_TO_USD:
+            price, src = amt, "ndi"
+        else:
+            raise NeedsInput(f"The tag shows a price in {cur}; type the price in US dollars")
     elif demo:
         price, src = demo["price"], "cache"
+    if price is None:
+        raise NeedsInput("I couldn't read a price — type it in the Price box and ask again")
+
+    tag_name = (tag.get("product_name") or "").strip()
+    if req.get("item_name"):
+        name, name_src = req["item_name"], "manual"
+    elif tag_name and len(tag_name) >= 3:
+        name, name_src = tag_name, "ndi"
+    elif demo:
+        name, name_src = demo["name"], "cache"
     else:
-        price, src = BUCKET_MID.get(bucket, 100.0), "bucket"
-    name = req.get("item_name") or price_d.get("product_name") or (demo or {}).get("name") or cat.replace("_", " ").title()
-    return {"type": "perceive", "item_name": name, "category": cat, "category_p": round(look_a["category"]["confidence"], 3),
-            "price_bucket": bucket, "price": price, "price_source": src, "ms": round((time.perf_counter() - t) * 1000)}
+        name, name_src = cat.replace("_", " ").title(), "category"
+    out = {"type": "perceive", "item_name": name, "name_source": name_src, "category": cat, "category_p": round(cat_p, 3),
+           "price_bucket": bucket, "price": price, "price_source": src, "tag_visible": round(tag_vis, 3),
+           "ms": round((time.perf_counter() - t) * 1000)}
+    if note:
+        out["price_note"] = note
+    if tag.get("was_price"):
+        out["was_price"] = tag["was_price"]
+    return out
 
 
 # ---------------------------------------------------------------- negotiation
@@ -122,7 +187,8 @@ async def _agent_offer_scan(agent: str, v: Vote, offers: list[tradeoffs.Offer]) 
 
 async def negotiate(item: Item, votes: dict[str, Vote], weights: dict[str, float]) -> dict:
     t = time.perf_counter()
-    offs = tradeoffs.offers(item)
+    dup = votes["owned"].extra.get("p_duplicate", 0) >= 0.5 if "owned" in votes else None
+    offs = tradeoffs.offers(item, owns_similar=dup)
     scans = await asyncio.gather(*(_agent_offer_scan(a, v, offs) for a, v in votes.items()), return_exceptions=True)
     scans = [s for s in scans if isinstance(s, dict)]
     by_agent = {s["agent"]: s for s in scans}
@@ -130,12 +196,20 @@ async def negotiate(item: Item, votes: dict[str, Vote], weights: dict[str, float
     for o in offs:  # fixed order; ties keep the earlier offer
         ps = {a: by_agent[a]["p"][o.id] if a in by_agent else votes[a].p_regret for a in votes}
         pooled[o.id] = pool(ps, weights)
-    best = min(offs, key=lambda o: pooled[o.id])
     dissenters = [a for a, v in votes.items() if v.stance == "wait"]
+
+    def worst_dissent(o):  # highest remaining regret among the selves that objected
+        return max((by_agent[a]["p"][o.id] for a in dissenters if a in by_agent), default=0.0)
+    resolving = [o for o in offs if worst_dissent(o) < 0.5]
+    if resolving:   # among offers that satisfy every dissenter, take the lowest pooled regret (ties keep fixed order)
+        best = min(resolving, key=lambda o: pooled[o.id])
+    else:           # nothing satisfies them: report the closest, and the verdict stays Wait
+        best = min(offs, key=lambda o: (worst_dissent(o), pooled[o.id]))
     picks = [{"agent": a, "offer_id": by_agent[a]["preferred"], "p_before": round(votes[a].p_regret, 4),
               "p_after": round(by_agent[a]["p"].get(best.id, votes[a].p_regret), 4)} for a in dissenters if a in by_agent]
     return {"type": "negotiation", "offers": [o.event() for o in offs], "picks": picks,
-            "chosen": {**best.event(), "p_after": round(pooled[best.id], 4)},
+            "chosen": {**best.event(), "p_after": round(pooled[best.id], 4), "resolves": bool(resolving),
+                       "worst_dissent_after": round(worst_dissent(best), 4)},
             "pooled_by_offer": {k: round(v, 4) for k, v in pooled.items()},
             "ms": round((time.perf_counter() - t) * 1000)}
 
@@ -144,12 +218,17 @@ async def negotiate(item: Item, votes: dict[str, Vote], weights: dict[str, float
 async def run(req: dict) -> AsyncIterator[dict]:
     t0 = time.perf_counter()
     yield {"type": "perceive_start"}
-    per = await perceive(req)
+    try:
+        per = await perceive(req)
+    except NeedsInput as e:
+        yield {"type": "error", "message": str(e), "needs_input": True}
+        return
     yield per
     item = Item(per["item_name"], per["category"], per["price"])
+    item.name_source = per.get("name_source", "ndi")  # type: ignore[attr-defined]
 
-    # Deal You needs web facts; use cache when warm, otherwise a bounded live search.
-    snaps = await deal.gather(item)
+    # Deal You needs web facts: cached when warm, otherwise bounded parallel live searches. Unknown product → no search.
+    snaps = [] if per.get("name_source") == "category" else await deal.gather(item, live=not req.get("demo_item"))
     async for ev in deliberate(item, snaps, t0):
         yield ev
 
@@ -159,26 +238,36 @@ async def deliberate(item: Item, snaps: list[dict], t0: float | None = None, spe
     t0 = t0 or time.perf_counter()
     t_council = time.perf_counter()
     yield {"type": "council_start", "agents": AGENTS}
-    tasks = {
-        asyncio.create_task(budget.vote(item)): "budget",
-        asyncio.create_task(goals.vote(item)): "goals",
-        asyncio.create_task(owned.vote(item)): "owned",
-        asyncio.create_task(deal.vote(item, snaps)): "deal",
-    }
-    votes: dict[str, Vote] = {}
-    for fut in asyncio.as_completed(list(tasks), timeout=12):
+    async def tagged(name, coro):
         try:
-            v = await fut
-            votes[v.agent] = v
-            yield v.event()
+            return name, await coro, None
         except Exception as e:  # noqa: BLE001  — a failed self drops out of the pool, never crashes the council
-            yield {"type": "agent_error", "message": f"{type(e).__name__}: {str(e)[:160]}"}
+            return name, None, e
+    tasks = [asyncio.create_task(tagged("budget", budget.vote(item))), asyncio.create_task(tagged("goals", goals.vote(item))),
+             asyncio.create_task(tagged("owned", owned.vote(item))), asyncio.create_task(tagged("deal", deal.vote(item, snaps)))]
+    votes: dict[str, Vote] = {}
+    try:
+        for fut in asyncio.as_completed(tasks, timeout=12):
+            name, v, err = await fut
+            if v is not None:
+                votes[v.agent] = v
+                yield v.event()
+            else:
+                yield {"type": "agent_error", "agent": name,
+                       "message": f"{name.title()} You couldn't vote ({type(err).__name__}) — left out of the pool"}
+    except asyncio.TimeoutError:
+        for t in tasks:
+            t.cancel()
+        for a in AGENTS:
+            if a not in votes:
+                yield {"type": "agent_error", "agent": a, "message": f"{a.title()} You timed out — left out of the pool"}
     if not votes:
         yield {"type": "error", "message": "No agent could vote (Drex unreachable?)"}
         return
 
-    weights = {a: max(v.stake, 0.5) for a, v in votes.items()}
-    ps = {a: v.p_regret for a, v in votes.items()}
+    counted = {a: v for a, v in votes.items() if not v.extra.get("abstain")}
+    weights = {a: min(max(v.stake, 0.5), 5.0) for a, v in counted.items()}  # cap: one loud self can't swamp the rest
+    ps = {a: v.p_regret for a, v in counted.items()}
     p = pool(ps, weights)
     condition = None
     veto_fired = False
@@ -193,17 +282,22 @@ async def deliberate(item: Item, snaps: list[dict], t0: float | None = None, spe
 
     final_p = p
     if veto_fired:
-        b, condition = "wait", f"Wait until payday ({F.persona.next_payday[5:].replace('-', '/')})"
+        pp = F.persona
+        if item.price <= pp.free_cash + pp.net_pay:
+            b, condition = "wait", f"Wait until payday ({pp.next_payday[5:].replace('-', '/')})"  # payday from the pay stub
+        else:
+            b, condition = "wait", "Not affordable this pay cycle — save up for it first"
     elif b != "buy":
         # Any split or "wait" without a veto: ask every self what would change its mind (all Drex calls).
-        neg = await negotiate(item, votes, weights)
+        neg = await negotiate(item, counted, weights)
         yield neg
         final_p = neg["chosen"]["p_after"]
         condition = neg["chosen"]["label"]
-        b = "buy_with_condition" if final_p < BAND_HIGH else "wait"
+        b = "buy_with_condition" if neg["chosen"]["resolves"] and final_p < BAND_HIGH else "wait"
         if b == "wait":
             condition = f"Best option: {condition}"
-    tally = {"buy": sum(v.stance == "buy" for v in votes.values()), "wait": sum(v.stance == "wait" for v in votes.values())}
+    tally = {"buy": sum(v.stance == "buy" for v in votes.values()), "wait": sum(v.stance == "wait" for v in votes.values()),
+             "abstain": sum(v.stance == "abstain" for v in votes.values())}
     verdict = {"type": "verdict", "band": b, "title": TITLES[b], "p": round(final_p, 4), "p_round_one": round(p, 4),
                "condition": condition, "veto": veto_fired, "tally": tally, "price_terms": price_terms(item),
                "item": {"name": item.name, "price": item.price, "category": item.category},

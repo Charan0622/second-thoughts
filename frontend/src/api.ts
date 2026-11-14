@@ -33,7 +33,7 @@ export interface VoteEvent {
   label: string
   p_regret: number
   stake: number
-  stance: 'buy' | 'wait'
+  stance: 'buy' | 'wait' | 'abstain'
   headline: string
   citation: Citation
   cite_p?: number
@@ -67,6 +67,8 @@ export interface NegotiationEvent {
 export interface PriceTerms {
   hours_of_work: number
   japan_slip_days: number
+  japan_slip_if_from_savings?: number
+  goal_name?: string
   pct_free_cash: number
 }
 export interface VerdictEvent {

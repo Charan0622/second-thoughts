@@ -13,7 +13,9 @@ def computed(item: Item, extra: str | None = None) -> list[str]:
            f"${sum(s['amount'] for s in p.scheduled):,.2f} = ${p.free_cash:,.2f}.",
            f"Next payday: {p.next_payday} (net pay about ${p.net_pay:,.0f})."]
     if left >= 0:
-        out.append(f"After this purchase, ${left:,.2f} of free cash remains before payday. Every scheduled bill stays covered.")
+        days = p.days_to_payday
+        out.append(f"After this purchase, ${left:,.2f} of free cash remains for {days} days until payday "
+                   f"(${left / days:,.2f} per day for food, transport and everything else). Every scheduled bill stays covered.")
     else:
         out.append(f"This purchase EXCEEDS free cash by ${-left:,.2f}. Paying it today leaves the "
                    f"{p.rent['payee']} payment of ${p.rent['amount']:,.2f} on {p.rent['date']} short by ${-left:,.2f}.")
@@ -25,19 +27,24 @@ def computed(item: Item, extra: str | None = None) -> list[str]:
 async def vote(item: Item, extra: str | None = None) -> Vote:
     p = F.persona
     fs = F.facts["budget"]
-    state = build_state(LABEL, "protect scheduled bills and keep Maya solvent until payday. You hold a veto.",
+    state = build_state(LABEL, "protect scheduled bills and keep the buyer solvent until payday. You hold a veto.",
                         fs, computed(item, extra), item)
     answers, res = await ask_council_member(
         agent="budget", label=LABEL, state=state, facts=fs,
         regret_true="The purchase leaves too little cash for scheduled bills or essentials before payday",
         regret_false="The purchase fits within free cash and every scheduled bill stays covered",
         extra_q={"bill_unpayable": drex.noul(
-            "If Maya makes this purchase today, will a scheduled bill become unpayable before her next payday?",
+            "If the buyer makes this purchase today, will a scheduled bill become unpayable before their next payday?",
             "The price is greater than free cash before payday, so a scheduled bill cannot be paid",
             "The price is at most the free cash before payday, so every scheduled bill can be paid")})
     cit, cp = pick_citation(answers, fs)
     left = p.free_cash - item.price
-    headline = (f"Fits: ${p.free_cash:,.0f} free → ${left:,.0f} left before payday" if left >= 0
-                else f"Over by ${-left:,.0f} — {p.rent['payee'].split('—')[-1].strip()} due {p.rent['date'][5:]}")
+    due = p.rent['date'][5:].replace('-', '/')
+    if left < 0:
+        headline = f"Over by ${-left:,.2f} — {p.rent['payee'].split('—')[-1].strip()} due {due}"
+    elif left < 15 * p.days_to_payday:
+        headline = f"Tight: ${left:,.0f} left for {p.days_to_payday} days (${left / p.days_to_payday:,.0f}/day)"
+    else:
+        headline = f"Fits: ${p.free_cash:,.0f} free → ${left:,.0f} left before payday"
     return Vote("budget", LABEL, answers["regret"]["noul"], answers["stake"]["score"], headline, cit, cp,
                 res["model"], res["ms"], extra={"p_unpayable": answers["bill_unpayable"]["noul"]}, state=state)

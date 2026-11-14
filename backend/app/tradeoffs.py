@@ -19,40 +19,46 @@ class Offer:
         return {"id": self.id, "label": self.label, "amount": self.amount}
 
 
-def offers(item: Item) -> list[Offer]:
+def offers(item: Item, owns_similar: bool | None = None) -> list[Offer]:
+    from .agents import goals
     p = F.persona
+    n, g = p.first_name, p.goal_short
     avg = p.avg_delivery
     two, four = round(2 * avg, 2), round(4 * avg, 2)
     hours = round(item.price / p.hourly, 1)
+    owned_name = (p.owned_item or "similar item").split("(")[0].strip()
     resale = round(p.owned_price * 0.5)
-    over_rule = max(0.0, item.price - 200)
+    br = goals.broken_rule(item)
+    over_rule = round(max(0.0, item.price - br["limit"]), 2) if br else 0.0
     out = [
         Offer("wait_payday", f"Wait until payday ({p.next_payday[5:].replace('-', '/')})", None,
-              f"Maya commits to waiting until her payday on {p.next_payday} (also Black Friday) before buying, so rent and bills are already covered."),
+              f"{n} commits to waiting until their payday on {p.next_payday} before buying, so rent and bills are already covered."),
         Offer("skip_takeout_2", f"Skip two takeout orders (${two:,.0f})", two,
-              f"Maya commits to skipping two food-delivery orders this month, saving ${two:,.2f}."),
+              f"{n} commits to skipping two food-delivery orders this month, saving ${two:,.2f}."),
         Offer("skip_takeout_4", f"Skip four takeout orders (${four:,.0f})", four,
-              f"Maya commits to skipping four food-delivery orders this month, saving ${four:,.2f}."),
-        Offer("resell_earbuds", f"Resell the March earbuds (≈ +${resale})", float(resale),
-              f"Maya commits to reselling her ${p.owned_price:.0f} earbuds for about ${resale}, so she won't own two similar devices."),
-        Offer("top_up_japan", f"Top up Japan fund by ${over_rule:,.0f}", over_rule,
-              f"Maya commits to adding ${over_rule:,.2f} (the amount over her $200 gadget limit) to the Japan fund on payday, so the trip does not slip."),
-        Offer("resell_and_topup", f"Resell the earbuds (≈ +${resale}) AND put ${over_rule:,.0f} into the Japan fund", over_rule + resale,
-              f"Maya commits to reselling her ${p.owned_price:.0f} earbuds (about ${resale}) so she owns one pair, AND adding ${over_rule:,.2f} "
-              f"(the amount over her $200 gadget limit) to the Japan fund on payday so the trip does not slip."),
+              f"{n} commits to skipping four food-delivery orders this month, saving ${four:,.2f}."),
+        Offer("resell_earbuds", f"Resell the {owned_name} (≈ +${resale})", float(resale),
+              f"{n} commits to reselling their ${p.owned_price:.0f} {owned_name} for about ${resale}, so they won't own two similar things."),
+        Offer("top_up_japan", f"Top up {g} fund by ${over_rule:,.0f}", over_rule,
+              f"{n} commits to adding ${over_rule:,.2f} (the amount over their own limit) to the {g} fund on payday, so the goal does not slip."),
+        Offer("resell_and_topup", f"Resell the {owned_name} (≈ +${resale}) AND put ${over_rule:,.0f} into the {g} fund", over_rule + resale,
+              f"{n} commits to reselling their ${p.owned_price:.0f} {owned_name} (about ${resale}) so they own one, AND adding ${over_rule:,.2f} "
+              f"(the amount over their own limit) to the {g} fund on payday so the goal does not slip."),
         Offer("extra_hours", f"Work {hours} extra hours", round(item.price, 2),
-              f"Maya commits to {hours} extra paid hours (${item.price:,.2f} at ${p.hourly:.0f}/hr) to cover this purchase."),
+              f"{n} commits to {hours} extra paid hours (${item.price:,.2f} at ${p.hourly:.0f}/hr) to cover this purchase."),
         Offer("return_30", "Keep the box — return within 30 days if unused", None,
-              "Maya commits to keeping the packaging and returning it within the 30-day window if she isn't using it weekly."),
+              f"{n} commits to keeping the packaging and returning it within the 30-day window if they aren't using it weekly."),
         Offer("wait_24h", "Sleep on it — decide in 24 hours", None,
-              "Maya commits to waiting 24 hours and buying only if she still wants it."),
+              f"{n} commits to waiting 24 hours and buying only if they still want it."),
     ]
-    breaks_rule = bool(p.rules) and item.category in ("headphones", "computer", "gadget") and over_rule > 0
-    owns_similar = bool(p.owned_item) and item.category == "headphones"
+    if owns_similar is None:  # no vote available (tests, bench helpers): fall back to the demo heuristic
+        owns_similar = bool(p.owned_item) and item.category == "headphones"
+    owns_similar = owns_similar and bool(p.owned_item)
     drop = set()
-    if not breaks_rule:
+    if over_rule <= 0:
         drop |= {"top_up_japan", "resell_and_topup"}
     if not owns_similar:
         drop |= {"resell_earbuds", "resell_and_topup"}
-    out = [o for o in out if o.id not in drop]
-    return out
+    if not p.delivery_count:
+        drop |= {"skip_takeout_2", "skip_takeout_4"}
+    return [o for o in out if o.id not in drop]

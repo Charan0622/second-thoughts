@@ -43,6 +43,17 @@ Pitch shortcut: `http://localhost:5173/?run=headphones` (or `shoes` / `macmini`)
    - If NDI can't find a price, the midpoint of Drex's price range is used, tagged with the source "bucket".
 4. If you see "Camera unavailable": check System Settings → Privacy & Security → Camera → enable your browser.
 
+## 3b · Connect your phone
+Take the photo with a phone instead of the laptop webcam. The laptop runs the council exactly as for a webcam capture.
+1. Run the backend on all interfaces: `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000`. Without `--host 0.0.0.0` the phone can't reach it.
+2. Put the phone and laptop on the **same Wi-Fi**.
+3. Click **📱 Connect phone** in the header. Scan the QR code. It opens `http://<laptop-LAN-IP>:8000/phone`.
+4. On the phone, tap **Take photo**. You can type a **Price $** first to skip the NDI price read. The overlay on the laptop closes and the council runs on that photo.
+- macOS may ask whether Python can accept incoming network connections. Click **Allow**.
+- Venue Wi-Fi often isolates clients from each other, so the phone can't reach the laptop. Fallback: turn on the phone's hotspot and join the laptop to it, then reopen the QR because the IP changes.
+- The phone page uses a file input with `capture`, not getUserMedia, so it works over plain http.
+- Check from the laptop: `curl -s localhost:8000/api/phone/info` returns the URL the QR encodes.
+
 ## 4 · Frontend without a backend
 `http://localhost:5173/?mock=1` replays all three flows with no keys and no network.
 

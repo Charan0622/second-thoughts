@@ -13,6 +13,7 @@ dependencies = [
     "pypdfium2>=5.15.2",
     "python-dotenv>=1.2.4",
     "python-multipart>=0.0.33",
+    "qrcode>=8.2",
     "uvicorn[standard]>=0.54.0",
 ]
 
