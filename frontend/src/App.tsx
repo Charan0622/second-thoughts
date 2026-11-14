@@ -287,7 +287,7 @@ export default function App() {
           </button>
           <PersonaLine persona={persona} mode={mode} />
           <DocsPanel openSignal={docsOpen} onChange={refreshPersona} />
-          <PhoneLink runId={state.runId} onFrame={(frame, price) => run({ demo_item: null, frame, price: price ?? parsedPrice, item_name: null })} />
+          <PhoneLink ready={!needsChoice} runId={state.runId} onFrame={(frame, price) => run({ demo_item: null, frame, price: price ?? parsedPrice, item_name: null })} />
           <span className={`source ${mock ? 'source-mock' : 'source-live'}`} title={mock ? 'Backend not reachable: replaying recorded fixture events' : 'Connected to the live backend'}>
             {mock ? 'Mock fixtures' : 'Live'}
           </span>
