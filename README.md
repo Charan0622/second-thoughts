@@ -64,7 +64,20 @@ flowchart LR
 
 ## Results
 
-_See `backend/bench/RESULTS.md`. The table will be inserted here._
+40 labelled scenarios (4 persona variants × 10 items). Every method gets the same facts and code-computed numbers; only the decider changes.
+
+| Method | Agreement with labels | Critical errors | Median latency | Cost / verdict |
+|---|---|---|---|---|
+| **Drex council (ours)** | **36/40 (90%)** | **0** | **0.43 s** | $0.0006 |
+| Single Drex call, all docs | 16/40 (40%) | 0 | 0.32 s | $0.0003 |
+| Single frontier LLM (Qwen3.8-Max) | 13/40 (32%) | 0 | 1.75 s | $0.0013 |
+| Frontier-LLM council (4× Qwen3.8-Max, same pooling) | 17/40 (42%) | 0 | 2.07 s | $0.0024 |
+
+- **Splitting the decision into selves is what works.** Given everything at once, both single-call deciders say "wait" to 35–39 of the 40 cards.
+- **On the same council structure, Drex beats the frontier LLM** at about 5× lower latency and 4× lower cost.
+- **Every council vote cites a real document region that Drex picked.** The baselines give an unexplained verdict.
+
+**Honesty note:** the first council run scored 70%. After that run we fixed two bugs in the trade-off offers and changed one rule (Deal You judges savings in dollars), then reran **all four** methods. The labels come from a single team-written rubric. Full caveats are in [`backend/bench/RESULTS.md`](backend/bench/RESULTS.md).
 
 ## Tool usage
 
