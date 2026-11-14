@@ -68,6 +68,15 @@ Take the photo with a phone instead of the laptop webcam. The laptop runs the co
 - The phone page uses a file input with `capture`, not getUserMedia, so it works over plain http.
 - Check from the laptop: `curl -s localhost:8000/api/phone/info` returns the URL the QR encodes.
 
+### Phone camera without shared Wi-Fi
+**Option A: iPhone as the webcam (macOS Continuity Camera, no network needed).** Keep the iPhone near the Mac, on the same Apple ID, with Wi-Fi and Bluetooth on. In the app, use the live camera and pick **iPhone Camera** in the **Camera** dropdown. The app picks it automatically when it's available.
+
+**Option B: secure public phone link (any phone, any network, including mobile data).**
+```bash
+./scripts/phone_tunnel.sh        # starts a temporary https://….trycloudflare.com link; Ctrl+C to stop
+```
+**📱 Connect phone** now shows a QR code for that HTTPS link. Through the tunnel, **only** `/phone` and `/api/phone/frame` are reachable. Documents, persona, crops, the ledger and verdicts all return 403. The link changes every time the script starts.
+
 ## 4 · Frontend without a backend
 `http://localhost:5173/?mock=1` replays all three flows with no keys and no network. Mock mode always behaves as the demo persona: there's no onboarding, **or try an example** and 1/2/3 work, and an uploaded photo replays the headphones flow.
 
