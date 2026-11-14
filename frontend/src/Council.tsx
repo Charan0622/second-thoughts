@@ -79,8 +79,7 @@ function Self({ agent, side, order, awake, listening, vote, veto, pick, offerLab
       <p className="self-q">{meta.question}</p>
 
       <div className="position" aria-live="polite">
-        <AnimatePresence mode="wait" initial={false}>
-          {vote ? (
+        {vote ? (
             <motion.div key={`${first}-${after ?? ''}`} className="position-inner"
               initial={{ opacity: 0, y: 10, scale: 1.04 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.5, ease: EASE }}>
@@ -94,15 +93,10 @@ function Self({ agent, side, order, awake, listening, vote, veto, pick, offerLab
               )}
             </motion.div>
           ) : listening ? (
-            <motion.span key="listening" className="listening" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              Reading {meta.reads.toLowerCase()}
-            </motion.span>
+            <span className="listening">Reading {meta.reads.toLowerCase()}</span>
           ) : (
-            <motion.span key="quiet" className="quiet" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              Reads {meta.reads.toLowerCase()}
-            </motion.span>
+            <span className="quiet">Reads {meta.reads.toLowerCase()}</span>
           )}
-        </AnimatePresence>
       </div>
 
       {vote && (

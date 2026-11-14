@@ -104,11 +104,10 @@ export default function Camera(p: Props) {
           </AnimatePresence>
         </div>
 
-        <AnimatePresence mode="wait">
-          <motion.div
+        <motion.div
             key={`${name ?? 'none'}-${price ?? 'none'}`}
             className="tag"
-            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           >
             {name ? <h1 className="tag-name">{name}</h1> : <h1 className="tag-name tag-hint">Point the camera at a price tag</h1>}
@@ -119,7 +118,6 @@ export default function Camera(p: Props) {
                 : p.demoMode ? 'Demo item · price from its tag' : 'Live camera'}
             </div>
           </motion.div>
-        </AnimatePresence>
       </div>
 
       <button className="ask" onClick={p.onAsk} disabled={p.busy || (!p.demoMode && !!camError)} aria-live="polite">

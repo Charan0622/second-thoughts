@@ -487,3 +487,6 @@ button.self:hover .open { color: var(--ink); text-decoration: underline; text-un
 .is-resolved .verdict { order: 1; }
 .is-resolved .split, .is-resolved .negotiation { order: 2; }
 .is-resolved .clerk { order: 3; }
+
+/* long live snippets (e.g. Keenable search results) stay readable: three lines on the card, full text in the evidence sheet */
+.self .cite { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }

@@ -82,9 +82,8 @@ export default function Verdict({ state, muted, setMuted, mock, onInspect }: Pro
           {state.negotiation && <Negotiation n={state.negotiation} />}
         </AnimatePresence>
 
-        {/* 05 · Verdict */}
-        <AnimatePresence mode="wait">
-          {v ? (
+        {/* 05 · Verdict: never gated on an exit animation */}
+        {v ? (
             <motion.div key={`v-${state.runId}`} className="verdict" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
               <div className="verdict-main">
                 <p className="label">The verdict · decided in {((v.council_ms ?? v.total_ms) / 1000).toFixed(2)} s</p>
@@ -133,14 +132,13 @@ export default function Verdict({ state, muted, setMuted, mock, onInspect }: Pro
               </div>
             </motion.div>
           ) : (
-            <motion.p key={`p-${state.phase}`} className="waiting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <p className="waiting">
               {state.phase === 'error'
                 ? <>The council couldn’t finish. <span>{state.error ?? 'Try again.'}</span></>
                 : busy ? (voted.length ? 'Weighing the votes…' : 'Your selves are reading your documents…')
                 : 'Hold that thought. Ask your selves before you pay.'}
-            </motion.p>
+            </p>
           )}
-        </AnimatePresence>
 
         <AnimatePresence>
           {(clerk.state === 'done' || clerk.state === 'error') && (
