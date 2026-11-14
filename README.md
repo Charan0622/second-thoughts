@@ -92,6 +92,17 @@ flowchart LR
 
 The live **usage ledger** in the UI shows calls, median latency and dollars per tool (`GET /api/ledger`).
 
+**Tally while building and benchmarking** (from the ledger, 2026-11-14 12:06 PT):
+
+| Tool | Calls | Errors | Median latency | Spend |
+|---|---|---|---|---|
+| Drex | 897 | 0 | 300 ms | $0.095 (792k input tokens) |
+| NDI | 11 jobs | 0 | 6.2 s | $0.156 |
+| Intern | 10 runs | 1 (an early timeout, since fixed) | 51 s (setup runs are long; explanations ~4 s) | — |
+| Keenable | 33 searches | 0 | 2.0 s | — |
+| DeepInfra | 23 calls (verdict sentences); about 400 more Qwen3.8-Max calls ran as benchmark baselines and aren't in the ledger | 0 | 1.1 s | — |
+| **Total** | | | | **≈ $0.25** |
+
 ## Run it
 
 Prerequisites: Python 3.12 via [uv](https://docs.astral.sh/uv/), Node 20+.
