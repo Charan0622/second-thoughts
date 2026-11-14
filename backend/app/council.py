@@ -150,7 +150,13 @@ async def run(req: dict) -> AsyncIterator[dict]:
 
     # Deal You needs web facts; use cache when warm, otherwise a bounded live search.
     snaps = await deal.gather(item)
+    async for ev in deliberate(item, snaps, t0):
+        yield ev
 
+
+async def deliberate(item: Item, snaps: list[dict], t0: float | None = None, speak: bool = True) -> AsyncIterator[dict]:
+    """Round one → veto → pool → negotiate → verdict (→ sentence). Used by the live stream and the benchmark."""
+    t0 = t0 or time.perf_counter()
     t_council = time.perf_counter()
     yield {"type": "council_start", "agents": AGENTS}
     tasks = {
@@ -204,6 +210,8 @@ async def run(req: dict) -> AsyncIterator[dict]:
                "total_ms": round((time.perf_counter() - t0) * 1000),
                "council_ms": round((time.perf_counter() - t_council) * 1000)}
     ledger.count_verdict()
+    verdict["_votes"] = {a: {"p": v.p_regret, "stake": v.stake} for a, v in votes.items()}
     yield verdict
-    yield await voice.sentence(verdict, votes)
+    if speak:
+        yield await voice.sentence(verdict, votes)
     yield {"type": "done"}

@@ -12,8 +12,8 @@ from pathlib import Path
 from .config import PRIVATE
 
 TOOLS = ("drex", "ndi", "intern", "keenable", "deepinfra", "adobe")
-# Drex Max v1.1 retail price per input token (USD). Approximate; used only for the ledger estimate.
-DREX_USD_PER_TOKEN = 0.30 / 1_000_000
+# Drex bills input tokens only.
+DREX_USD_PER_TOKEN = 0.12 / 1_000_000  # Drex Max, per Nace pricing docs
 
 _calls: dict[str, list[dict]] = defaultdict(list)
 _verdicts = 0

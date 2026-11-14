@@ -9,8 +9,9 @@ LABEL = "Already-Own-It You"
 async def vote(item: Item, extra: str | None = None) -> Vote:
     p = F.persona
     fs = F.facts["owned"]
-    computed = [f"Receipts on file: {p.owned_item} (${p.owned_price:.0f}, {p.owned_date}). The return window has closed.",
-                f"Estimated resale value of those earbuds today: about ${round(p.owned_price * 0.5):.0f}."]
+    computed = ([f"Receipts on file: {p.owned_item} (${p.owned_price:.0f}, {p.owned_date}). The return window has closed.",
+                 f"Estimated resale value of that item today: about ${round(p.owned_price * 0.5):.0f}."]
+                if p.owned_item else ["Maya's receipts show nothing similar to the proposed purchase."])
     if extra:
         computed.append(extra)
     state = build_state(LABEL, "stop Maya from buying something she already owns or that duplicates what she has.", fs,
@@ -24,7 +25,7 @@ async def vote(item: Item, extra: str | None = None) -> Vote:
                                         "No owned item serves the same main purpose")})
     cit, cp = pick_citation(answers, fs)
     dup = answers["duplicate"]["noul"]
-    headline = (f"You already own ${p.owned_price:.0f} noise-cancelling earbuds" if dup >= 0.5
+    headline = (f"You already own: {p.owned_item.split('(')[0].strip()} (${p.owned_price:.0f})" if dup >= 0.5 and p.owned_item
                 else "Nothing like this in your receipts")
     return Vote("owned", LABEL, answers["regret"]["noul"], answers["stake"]["score"], headline, cit, cp,
                 res["model"], res["ms"], extra={"p_duplicate": dup}, state=state)

@@ -206,8 +206,21 @@ def _build() -> None:
     rm = (_results.get(RM, {}).get("data") or {}).get("rules")
     if rm:
         p.rules, p.rules_source = [str(r) for r in rm], "ndi"
-    persona = p
+    use_persona(p, crops=True)
+    _persist()
 
+
+BASE: Persona | None = None
+
+
+def use_persona(p: Persona, crops: bool = False) -> None:
+    """Rebuild every self's facts from persona values (citations still point at the NDI-extracted docs)."""
+    global persona, BASE
+    if BASE is None or crops:
+        BASE = p
+    persona = p
+    B, PS, ST, RE, PR, RM = ("bank_statement.pdf", "pay_stub.jpg", "savings_tracker.xlsx", "receipt_email.eml",
+                             "paper_receipt.jpg", "rules_memo.m4a")
     rent = p.rent
     fs: dict[str, list[Fact]] = {"budget": [], "goals": [], "owned": [], "deal": []}
     fs["budget"] += [
@@ -232,15 +245,20 @@ def _build() -> None:
         _fact("owned_paper", "owned", f"Paper receipt confirms ${p.owned_price:.0f} earbuds purchase on 03/08/2026.", PR, "/price"),
         _fact("owned_warranty", "owned", "Paper receipt does not state a warranty length; the email says 1-year limited.", RE, "/warranty"),
     ]
+    if not p.owned_item:
+        fs["owned"] = [Fact(id="owned_none", agent="owned", text="No receipts on file for anything similar.",
+                            doc="receipts", doc_label="Receipts")]
     for agent_facts in fs.values():
         for f in agent_facts:
-            try:
-                make_crop(f)
-            except Exception:  # noqa: BLE001
-                pass
+            if crops:
+                try:
+                    make_crop(f)
+                except Exception:  # noqa: BLE001
+                    pass
+            elif BASE is not None:
+                f.crop_url = f"/files/crops/{f.id}.png" if (CROPS / f"{f.id}.png").exists() else None
     facts.clear()
     facts.update(fs)
-    _persist()
 
 
 def _persist() -> None:

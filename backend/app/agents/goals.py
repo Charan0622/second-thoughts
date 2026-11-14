@@ -18,7 +18,9 @@ def computed(item: Item, extra: str | None = None) -> list[str]:
     out = [f"Japan fund: ${p.japan_saved:,.0f} of ${p.japan_target:,.0f}; ${remaining:,.0f} to go at ${p.japan_monthly:,.0f}/month "
            f"= {remaining / p.japan_monthly:.1f} months.",
            f"If this ${item.price:,.0f} came out of the Japan plan, the trip would slip about {slip_days(item.price)} days."]
-    if item.category == "running_gear":
+    if not p.rules:
+        out.append("Rule check: Maya has recorded no personal spending rules.")
+    elif item.category == "running_gear":
         out.append("Rule check: this is running gear, which Maya's rule explicitly exempts.")
     elif item.is_gadget and item.price > RULE_LIMIT:
         out.append(f"Rule check: this is a gadget over ${RULE_LIMIT:.0f} (${item.price:,.0f}) — it BREAKS Maya's own rule.")
@@ -43,7 +45,9 @@ async def vote(item: Item, extra: str | None = None) -> Vote:
     cit, cp = pick_citation(answers, fs)
     d = slip_days(item.price)
     breaks = answers["breaks_rule"]["noul"] >= 0.5
-    if item.category == "running_gear":
+    if not F.persona.rules:
+        headline = f"No rules on file · Japan slips {d} days"
+    elif item.category == "running_gear":
         headline = f"Running gear is exempt · Japan +{d} days if unplanned"
     elif breaks:
         headline = f"Breaks your ${RULE_LIMIT:.0f} gadget rule · Japan slips {d} days"

@@ -88,7 +88,7 @@ async def verdict(req: dict):
                 if ev["type"] == "verdict":
                     _last.clear()
                     _last.update({"verdict": ev, "votes": votes})
-                yield json.dumps(ev) + "\n"
+                yield json.dumps({k: v for k, v in ev.items() if not k.startswith("_")}) + "\n"
         except Exception as e:  # noqa: BLE001
             yield json.dumps({"type": "error", "message": f"{type(e).__name__}: {str(e)[:300]}"}) + "\n"
 
