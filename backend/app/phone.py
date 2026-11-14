@@ -43,8 +43,11 @@ def _qr_svg(data: str) -> str:
 @router.get("/api/phone/info")
 async def phone_info(request: Request):
     port = request.url.port or 8000
-    url = f"http://{_lan_ip()}:{port}/phone"
-    return {"url": url, "qr_svg": _qr_svg(url)}
+    from .config import PRIVATE
+    pub = PRIVATE / "public_url.txt"   # written by scripts/phone_tunnel.sh while an HTTPS tunnel is running
+    public = pub.read_text().strip() if pub.exists() else ""
+    url = f"{public.rstrip('/')}/phone" if public.startswith("https://") else f"http://{_lan_ip()}:{port}/phone"
+    return {"url": url, "qr_svg": _qr_svg(url), "via": "tunnel" if public else "lan"}
 
 
 @router.post("/api/phone/frame")
