@@ -5,10 +5,10 @@ import { mockLedger } from './mock'
 
 const ROWS: { key: string; label: string; what: string }[] = [
   { key: 'drex', label: 'Drex', what: 'votes · perceive' },
-  { key: 'ndi', label: 'NDI', what: 'docs · price read' },
-  { key: 'intern', label: 'Intern', what: 'clerk' },
+  { key: 'ndi', label: 'NDI', what: 'documents · price' },
   { key: 'keenable', label: 'Keenable', what: 'live prices' },
   { key: 'deepinfra', label: 'DeepInfra', what: 'verdict sentence' },
+  { key: 'intern', label: 'Intern', what: 'the Clerk' },
   { key: 'adobe', label: 'Adobe', what: 'avatars · slides' },
 ]
 
@@ -34,45 +34,27 @@ export default function Ledger({ mock }: { mock: boolean }) {
   }, [mock])
 
   return (
-    <div className="panel ledger">
-      <div className="ledger-head">
-        <span className="panel-title">Tool ledger</span>
-        <span className="meta">{stale ? 'offline' : 'live'}</span>
-      </div>
-      <table>
-        <thead>
-          <tr><th>Tool</th><th className="num">Calls</th><th className="num">Median</th></tr>
-        </thead>
-        <tbody>
-          {ROWS.map((r) => {
-            const t = data?.tools[r.key]
-            return (
-              <tr key={r.key}>
-                <td><span className="tool-name">{r.label}</span> <span className="tool-what">{t?.note && t.calls === 0 ? 'offline assets' : r.what}</span></td>
-                <td className="num">
-                  <motion.span
-                    key={t?.calls ?? -1}
-                    className="calls"
-                    initial={{ y: -10, opacity: 0.2, color: '#fcc451' }}
-                    animate={{ y: 0, opacity: 1, color: '#f0efec' }}
-                    transition={{ duration: 0.5 }}
-                  >
-                    {t?.calls ?? '—'}
-                  </motion.span>
-                  {t?.errors ? <span className="errs"> ({t.errors} err)</span> : null}
-                </td>
-                <td className="num muted">{fmtMs(t?.ms_median)}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      {data && (
-        <div className="ledger-foot">
-          <span><b>{data.verdicts}</b> verdicts</span>
-          <span>≈ <b>${data.cost_usd_est.toFixed(3)}</b> spent</span>
-        </div>
-      )}
-    </div>
+    <footer className="ledger" aria-label="Tool ledger">
+      <p className="ledger-title">
+        <span className="label">Under the hood</span>
+        <span className="ledger-state">{mock ? 'mock counts' : stale ? 'ledger offline' : 'live counts'}</span>
+      </p>
+      <ul className="ledger-tools">
+        {ROWS.map((r) => {
+          const t = data?.tools[r.key]
+          const offline = t?.note && t.calls === 0
+          return (
+            <li key={r.key}>
+              <span className="tool">{r.label}</span>
+              <motion.span key={t?.calls ?? -1} className="calls" initial={{ opacity: 0.3, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+                {t?.calls ?? '—'}
+              </motion.span>
+              <span className="what">{offline ? 'offline assets' : `${r.what} · ${fmtMs(t?.ms_median)}`}{t?.errors ? ` · ${t.errors} err` : ''}</span>
+            </li>
+          )
+        })}
+      </ul>
+      {data && <p className="ledger-sum"><b>{data.verdicts}</b> verdicts · ≈ <b>${data.cost_usd_est.toFixed(3)}</b> spent</p>}
+    </footer>
   )
 }

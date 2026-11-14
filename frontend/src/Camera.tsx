@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { DemoItem, DemoItemId, PerceiveEvent } from './api'
 import type { Phase } from './App'
@@ -8,18 +8,21 @@ interface Props {
   setDemoMode: (v: boolean) => void
   items: DemoItem[]
   selected: DemoItemId
-  onPickDemo: (id: DemoItemId) => void
+  onSelect: (id: DemoItemId) => void
+  onAsk: () => void
   onCapture: (dataUrl: string) => void
+  captureRef: MutableRefObject<(() => void) | null>
   manualPrice: string
   setManualPrice: (v: string) => void
   phase: Phase
   perceive?: PerceiveEvent
   busy: boolean
+  resolved: boolean
 }
 
-const SHORT: Record<DemoItemId, string> = { shoes: 'Shoes', headphones: 'Headphones', macmini: 'Mac mini' }
+const SHORT: Record<DemoItemId, string> = { shoes: 'Running shoes', headphones: 'Headphones', macmini: 'Mac mini' }
 const SOURCE_LABEL: Record<PerceiveEvent['price_source'], string> = {
-  ndi: 'read by NDI', manual: 'manual', cache: 'cached', bucket: 'estimated',
+  ndi: 'Price read by NDI', manual: 'Price entered by you', cache: 'Cached price', bucket: 'Estimated price',
 }
 
 function grabFrame(video: HTMLVideoElement): string {
@@ -31,6 +34,11 @@ function grabFrame(video: HTMLVideoElement): string {
   c.height = Math.round(h * scale)
   c.getContext('2d')!.drawImage(video, 0, 0, c.width, c.height)
   return c.toDataURL('image/jpeg', 0.85)
+}
+
+const money = (n: number) => {
+  const whole = Number.isInteger(n)
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 })}`
 }
 
 export default function Camera(p: Props) {
@@ -53,83 +61,99 @@ export default function Camera(p: Props) {
     return () => { cancelled = true; stream?.getTracks().forEach((t) => t.stop()) }
   }, [p.demoMode])
 
-  const capture = () => {
-    const v = videoRef.current
-    if (!v || !v.videoWidth) return
-    const url = grabFrame(v)
-    setStill(url)
-    p.onCapture(url)
-  }
+  const { captureRef, onCapture } = p
+  useEffect(() => {
+    captureRef.current = () => {
+      const v = videoRef.current
+      if (!v || !v.videoWidth) return
+      const url = grabFrame(v)
+      setStill(url)
+      onCapture(url)
+    }
+  }, [captureRef, onCapture])
 
   const item = p.items.find((i) => i.id === p.selected)
   const scanning = p.phase === 'perceiving'
   const showStill = !p.demoMode && still && p.phase !== 'idle'
 
+  // What we know about the item: the perceived reading once it lands, otherwise the demo item's tag.
+  const name = p.perceive?.item_name ?? (p.demoMode ? item?.name : undefined)
+  const price = p.perceive ? p.perceive.price : p.demoMode ? item?.price ?? null : null
+
+  const label = p.busy ? 'Your selves are weighing in' : p.resolved ? 'Ask again' : p.demoMode ? 'Ask my selves' : 'Capture & ask my selves'
+
   return (
-    <div className="panel camera">
-      <div className="camera-head">
-        <span className="panel-title">The item</span>
-        <label className="toggle">
-          <input type="checkbox" checked={p.demoMode} onChange={(e) => { p.setDemoMode(e.target.checked); setStill(null) }} />
-          <span className="toggle-track"><span className="toggle-thumb" /></span>
-          <span>Demo mode</span>
-        </label>
-      </div>
+    <section className="desire" aria-label="The item you want">
+      <div className="object">
+        <div className={`frame-wrap ${scanning ? 'is-scanning' : ''}`}>
+          {p.demoMode ? (
+            item && <img key={item.id} className="frame" src={item.frame_url} alt={item.name} />
+          ) : showStill ? (
+            <img className="frame" src={still!} alt="Captured frame" />
+          ) : camError ? (
+            <div className="cam-error">Camera unavailable: {camError}. Switch back to the demo items.</div>
+          ) : null}
+          {!p.demoMode && <video ref={videoRef} className="frame" muted playsInline style={{ visibility: showStill ? 'hidden' : 'visible' }} />}
+          <AnimatePresence>
+            {scanning && (
+              <motion.div className="scan" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <motion.span className="scan-line" animate={{ top: ['6%', '94%', '6%'] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }} />
+                <span className="scan-label">Reading the tag</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-      <div className="viewport">
-        {p.demoMode ? (
-          item && <img key={item.id} className="frame" src={item.frame_url} alt={item.name} />
-        ) : showStill ? (
-          <img className="frame" src={still!} alt="Captured frame" />
-        ) : camError ? (
-          <div className="cam-error">Camera unavailable — {camError}. Switch on Demo mode.</div>
-        ) : null}
-        {!p.demoMode && <video ref={videoRef} className="frame" muted playsInline style={{ visibility: showStill ? 'hidden' : 'visible' }} />}
-
-        <AnimatePresence>
-          {scanning && (
-            <motion.div className="scan" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <motion.div className="scan-line" animate={{ top: ['0%', '100%', '0%'] }} transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }} />
-              <span className="scan-label">Perceiving…</span>
-            </motion.div>
-          )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${name ?? 'none'}-${price ?? 'none'}`}
+            className="tag"
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {name ? <h1 className="tag-name">{name}</h1> : <h1 className="tag-name tag-hint">Point the camera at a price tag</h1>}
+            <div className="tag-price">{price != null ? money(price) : <span className="tag-unknown">Price unknown</span>}</div>
+            <div className="tag-source">
+              {p.perceive
+                ? <>{SOURCE_LABEL[p.perceive.price_source] ?? p.perceive.price_source} · {p.perceive.category.replace(/_/g, ' ')} ({Math.round(p.perceive.category_p * 100)}%)</>
+                : p.demoMode ? 'Demo item · price from its tag' : 'Live camera'}
+            </div>
+          </motion.div>
         </AnimatePresence>
       </div>
 
-      <AnimatePresence mode="wait">
-        {p.perceive ? (
-          <motion.div key={p.perceive.item_name + p.perceive.price} className="item-readout" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <div className="item-name">{p.perceive.item_name}</div>
-            <div className="item-meta">
-              <span className="item-price">{p.perceive.price != null ? `$${p.perceive.price.toLocaleString('en-US')}` : '—'}</span>
-              <span className="tag">{SOURCE_LABEL[p.perceive.price_source] ?? p.perceive.price_source}</span>
-              <span className="item-cat">{p.perceive.category} <span className="muted">· {Math.round(p.perceive.category_p * 100)}%</span></span>
-            </div>
-          </motion.div>
-        ) : (
-          <motion.div key="hint" className="item-readout item-hint" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            {p.demoMode ? 'Pick an item — or press 1 · 2 · 3' : 'Point the camera at a price tag and capture'}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <button className="ask" onClick={p.onAsk} disabled={p.busy || (!p.demoMode && !!camError)} aria-live="polite">
+        <span className="ask-label">{label}</span>
+        {p.busy ? <span className="ask-dots" aria-hidden><i /><i /><i /></span> : <span className="ask-key" aria-hidden>↵</span>}
+      </button>
 
-      <div className="controls">
+      <div className="pick">
         {p.demoMode ? (
-          <div className="demo-buttons">
+          <div className="items" role="radiogroup" aria-label="Demo items">
             {p.items.map((it, i) => (
-              <button key={it.id} className={`btn demo-btn ${p.selected === it.id ? 'active' : ''}`} onClick={() => p.onPickDemo(it.id)}>
-                <kbd>{i + 1}</kbd> {SHORT[it.id] ?? it.name}
+              <button
+                key={it.id}
+                role="radio"
+                aria-checked={p.selected === it.id}
+                className={`item ${p.selected === it.id ? 'is-on' : ''}`}
+                onClick={() => p.onSelect(it.id)}
+                disabled={p.busy}
+              >
+                <kbd>{i + 1}</kbd>{SHORT[it.id] ?? it.name}
               </button>
             ))}
           </div>
-        ) : (
-          <button className="btn btn-primary capture" onClick={capture} disabled={!!camError || p.busy}>Capture &amp; ask</button>
-        )}
-        <label className="price-input">
-          <span className="muted">Price $</span>
-          <input inputMode="decimal" placeholder="auto" value={p.manualPrice} onChange={(e) => p.setManualPrice(e.target.value)} aria-label="Manual price override" />
-        </label>
+        ) : null}
+        <div className="pick-row">
+          <button className="link" onClick={() => { p.setDemoMode(!p.demoMode); setStill(null) }} disabled={p.busy}>
+            {p.demoMode ? 'Use my camera' : 'Use demo items'}
+          </button>
+          <label className="override">
+            <span>Price override</span>
+            <input inputMode="decimal" placeholder="auto" value={p.manualPrice} onChange={(e) => p.setManualPrice(e.target.value)} />
+          </label>
+        </div>
       </div>
-    </div>
+    </section>
   )
 }
