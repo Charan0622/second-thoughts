@@ -112,21 +112,21 @@ async def web_price(name: str) -> dict | None:
             continue
         for p in keenable_client.prices_near(res["title"] + " " + res["snippet"], None):
             if 1 <= p <= 20000:
-                found.append((p, res.get("host") or "web"))
+                found.append((p, res.get("host") or "web", res.get("url") or ""))
     if not found:
         return None
-    ps = sorted(p for p, _ in found)
+    ps = sorted(p for p, _, _ in found)
     med = ps[len(ps) // 2]
-    keep = [(p, h) for p, h in found if 0.6 * med <= p <= 1.6 * med]
+    keep = [(p, h, u) for p, h, u in found if 0.6 * med <= p <= 1.6 * med]
     if not keep:
         return None
-    kp = sorted(p for p, _ in keep)
+    kp = sorted(p for p, _, _ in keep)
     typical = kp[len(kp) // 2]
     seen_hosts, sources = set(), []
-    for p, h in sorted(keep, key=lambda x: abs(x[0] - typical)):
+    for p, h, u in sorted(keep, key=lambda x: abs(x[0] - typical)):
         if h not in seen_hosts:
             seen_hosts.add(h)
-            sources.append({"host": h, "price": p})
+            sources.append({"host": h, "price": p, "url": u})
     return {"suggested_price": round(typical, 2), "sources": sources[:4], "n": len(kp), "query": f"{name} price"}
 
 
@@ -383,7 +383,7 @@ async def run(req: dict) -> AsyncIterator[dict]:
     item = Item(per["item_name"], per["category"], per["price"])
     item.name_source = per.get("name_source", "ndi")  # type: ignore[attr-defined]
 
-    # Deal You needs web facts: cached when warm, otherwise bounded parallel live searches. Unknown product → no search.
+    # The Bargain Hunter needs web facts: cached when warm, otherwise bounded parallel live searches. Unknown product → no search.
     snaps = [] if per.get("name_source") == "category" else await deal.gather(item, live=not req.get("demo_item"))
     async for ev in deliberate(item, snaps, t0):
         yield ev

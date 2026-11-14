@@ -7,7 +7,7 @@ from .. import drex, keenable_client
 from ..facts import Fact
 from .base import Item, Vote, ask_council_member, build_state, pick_citation
 
-LABEL = "Deal You"
+LABEL = "The Bargain Hunter"
 BLACK_FRIDAY = "2026-11-27"
 
 
@@ -117,6 +117,14 @@ async def vote(item: Item, snaps: list[dict], extra: str | None = None) -> Vote:
         extra_q={"wait_wins": drex.noul("Would waiting until Black Friday likely save the buyer meaningful money on this item?")})
     cit, cp = pick_citation(answers, fs)
     lo = typical_low(prices)
+    _, hits = on_topic_prices(item, snaps)
+    links, seen = [], set()
+    for r in hits:   # where each price was seen, cheapest first — shown as clickable links in the UI
+        ps = keenable_client.prices_near(r["title"] + " " + r["snippet"], item.price)
+        if ps and r.get("url") and r["url"] not in seen:
+            seen.add(r["url"])
+            links.append({"host": r.get("host") or "web", "url": r["url"], "price": min(ps), "title": r["title"][:90]})
+    links.sort(key=lambda x: x["price"])
     p_reg = answers["regret"]["noul"]
     if p_reg >= 0.5:   # headline follows the vote
         headline = (f"{round((item.price / lo - 1) * 100)}% above the typical ${lo:,.0f} — shop around" if item.price > lo * 1.05
@@ -128,4 +136,4 @@ async def vote(item: Item, snaps: list[dict], extra: str | None = None) -> Vote:
     else:
         headline = "Fair price — waiting won't save much"
     return Vote("deal", LABEL, p_reg, answers["stake"]["score"], headline, cit, cp,
-                res["model"], res["ms"], extra={"p_wait_wins": answers["wait_wins"]["noul"]}, state=state)
+                res["model"], res["ms"], extra={"p_wait_wins": answers["wait_wins"]["noul"], "links": links[:4]}, state=state)

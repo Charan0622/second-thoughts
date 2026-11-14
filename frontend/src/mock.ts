@@ -41,7 +41,7 @@ function bump(tool: string, n = 1) {
 }
 
 const LABELS: Record<AgentId, string> = {
-  budget: 'Budget You', goals: 'Goals You', owned: 'Already-Own-It You', deal: 'Deal You',
+  budget: 'The Accountant', goals: 'The Planner', owned: 'The Minimalist', deal: 'The Bargain Hunter',
 }
 
 type VoteSpec = Omit<VoteEvent, 'type' | 'label' | 'ms' | 'model' | 'stance'>

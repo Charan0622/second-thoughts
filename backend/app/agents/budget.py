@@ -3,7 +3,7 @@ from __future__ import annotations
 from .. import drex, facts as F
 from .base import Item, Vote, ask_council_member, build_state, pick_citation
 
-LABEL = "Budget You"
+LABEL = "The Accountant"
 
 
 def computed(item: Item, extra: str | None = None) -> list[str]:

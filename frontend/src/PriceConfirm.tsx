@@ -7,7 +7,7 @@ export interface ConfirmPriceEvent {
   item_name: string
   category?: string
   suggested_price: number | null
-  sources: { host: string; price: number }[]
+  sources: { host: string; price: number; url?: string }[]
   message: string
 }
 
@@ -38,7 +38,9 @@ export default function PriceConfirm({ ev, onConfirm, onCancel }: { ev: ConfirmP
         <p className="pc-title">{ev.item_name}</p>
         <p className="pc-msg">{ev.message}</p>
         {ev.sources.length > 0 && (
-          <ul className="pc-src">{ev.sources.map((s) => <li key={s.host}>{s.host} · ${s.price.toLocaleString()}</li>)}</ul>
+          <ul className="pc-src">{ev.sources.map((s) => <li key={s.host}>{s.url
+            ? <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>{s.host} · ${s.price.toLocaleString()} ↗</a>
+            : <>{s.host} · ${s.price.toLocaleString()}</>}</li>)}</ul>
         )}
         <div className="pc-row">
           {ev.suggested_price != null && (

@@ -21,7 +21,7 @@ The response is one JSON object per line, in the order shown. The frontend reads
  "price_bucket":"200_399", "price":349.0, "price_source":"ndi"|"manual"|"cache"|"bucket", "ms":290}
 {"type":"council_start", "agents":["budget","goals","owned","deal"]}
 // one per agent, in arrival order (they run in parallel):
-{"type":"vote", "agent":"budget", "label":"Budget You",
+{"type":"vote", "agent":"budget", "label":"The Accountant",
  "p_regret":0.03, "stake":2.3, "stance":"buy"|"wait",           // stance = p_regret < 0.5 ? "buy" : "wait"
  "headline":"Fits in $425 free cash; $76 left before payday",       // computed in code
  "citation":{"doc":"bank_statement.pdf", "doc_label":"Bank statement", "page":1,

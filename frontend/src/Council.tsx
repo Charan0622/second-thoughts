@@ -4,10 +4,10 @@ import { AGENTS, type AgentId, type Citation, type Persona, type Pick, type Veto
 import type { RunState } from './App'
 
 export const AGENT_META: Record<AgentId, { label: string; short: string; question: string; reads: string }> = {
-  budget: { label: 'Budget You', short: 'Budget', question: 'Can I afford it?', reads: 'bank statement and pay stub' },
-  goals: { label: 'Goals You', short: 'Goals', question: 'What does it cost my future?', reads: 'savings goal and your rules' },
-  owned: { label: 'Already-Own-It You', short: 'Already own it', question: 'Do I have one already?', reads: 'receipts' },
-  deal: { label: 'Deal You', short: 'Deal', question: 'Is this the right price?', reads: 'live price search' },
+  budget: { label: 'The Accountant', short: 'Budget', question: 'Can I afford it?', reads: 'bank statement and pay stub' },
+  goals: { label: 'The Planner', short: 'Goals', question: 'What does it cost my future?', reads: 'savings goal and your rules' },
+  owned: { label: 'The Minimalist', short: 'Already own it', question: 'Do I have one already?', reads: 'receipts' },
+  deal: { label: 'The Bargain Hunter', short: 'Deal', question: 'Is this the right price?', reads: 'live price search' },
 }
 
 const EASE = [0.16, 1, 0.3, 1] as const
@@ -182,12 +182,24 @@ function Viz({ agent, vote, state, persona }: { agent: AgentId; vote: VoteEvent;
   }
   const price = state.perceive?.price ?? null
   const other = amounts(vote.headline).find((x) => price == null || Math.abs(x.n - price) > 0.5)
-  if (price == null || !other) return null
+  const links = (vote.links ?? []).slice(0, 3)
+  const linkRow = links.length ? (
+    <span className="deal-links" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end', marginTop: 6, pointerEvents: 'auto' }}>
+      {links.map((l) => (
+        <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer" title={l.title ?? l.host}
+          style={{ font: '500 0.72rem/1 var(--mono, monospace)', padding: '5px 8px', borderRadius: 999, border: '1px solid var(--hair-2)', color: 'var(--ink)', textDecoration: 'none', background: 'var(--ivory)' }}>
+          {l.host} · ${l.price.toLocaleString('en-US')} ↗
+        </a>
+      ))}
+    </span>
+  ) : null
+  if (price == null || !other) return linkRow
   const max = Math.max(price, other.n)
   return (
     <span className="viz viz-deal" aria-label={`This tag ${price}, elsewhere ${other.text}`}>
       <span className="bar"><span style={{ width: `${(price / max) * 100}%` }} /><em>this tag ${price.toLocaleString('en-US')}</em></span>
       <span className="bar bar-other"><span style={{ width: `${(other.n / max) * 100}%` }} /><em>elsewhere {other.text}</em></span>
+      {linkRow}
     </span>
   )
 }

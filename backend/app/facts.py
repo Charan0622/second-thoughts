@@ -46,7 +46,7 @@ class Fact:
                 "bbox": self.bbox, "crop_url": self.crop_url}
 
 
-# Mode "mine" without a savings goal: Goals You divides by the monthly contribution, so a huge sentinel keeps every
+# Mode "mine" without a savings goal: The Planner divides by the monthly contribution, so a huge sentinel keeps every
 # "goal slips N days" at 0 instead of crashing or inventing a goal. /api/persona reports it as 0.
 NO_GOAL_MONTHLY = 1e9
 MODES = ("none", "demo", "mine")
@@ -518,7 +518,7 @@ def _build_mine() -> None:
         else:
             flags.append(f"next payday: assuming {p.next_payday} (14 days from today)")
     if not ST:
-        flags.append("No savings goal yet — answer the quick questions so Goals You can weigh in")
+        flags.append("No savings goal yet — answer the quick questions so The Planner can weigh in")
     else:
         p.goal_name = str(_val(ST, "/goal", None) or "savings goal")
         p.japan_target = _num(val(ST, "/target_amount", "goal target", "savings"), 0.0)
@@ -540,7 +540,7 @@ def _build_mine() -> None:
     elif _slot_docs.get("receipts"):
         flags.append("receipts: no purchased item found in your receipts")
     else:
-        flags.append("No receipts uploaded — Already-Own-It You has nothing to compare against")
+        flags.append("No receipts uploaded — The Minimalist has nothing to compare against")
     prof = load_profile()
     if prof.get("goal_name") and _num(prof.get("goal_target"), 0) > 0:
         p.goal_name = str(prof["goal_name"])

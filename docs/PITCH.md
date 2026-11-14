@@ -43,11 +43,11 @@
 | 0:08 | Press **1** (shoes) | "Running shoes, $110. Four of her future selves vote in under half a second. Each one reads only its own documents." |
 | 0:18 | Verdict **Buy** | "All four agree. Buy." |
 | 0:22 | Press **2** (headphones) | "Now $349 headphones." |
-| 0:27 | Goals and Owned cards turn red | "Goals You says this breaks her own rule: no gadgets over $200. Already-Own-It You found $179 earbuds in her receipts." |
+| 0:27 | Goals and Owned cards turn red | "The Planner says this breaks her own rule: no gadgets over $200. The Minimalist found $179 earbuds in her receipts." |
 | 0:37 | Negotiation chips fly to the cards | "Every self scores every trade-off with Drex. Both dissenters pick the same one: resell the earbuds and put $149 into the Japan fund." |
 | 0:47 | Verdict **Buy, with a condition**; sentence spoken | (let the spoken sentence play) |
 | 0:53 | Press **3** (Mac mini) | "And the Mac mini, $599." |
-| 0:57 | VETO stamp | "Budget You vetoes it. Rent would bounce on November 20th. And here's the actual line from her bank statement." |
+| 0:57 | VETO stamp | "The Accountant vetoes it. Rent would bounce on November 20th. And here's the actual line from her bank statement." |
 | 1:05 | Zoom on the highlighted crop, then the ledger | "Drex makes every decision. NDI grounds every vote. Intern is the clerk. Decided in 0.7 seconds, for a twentieth of a cent." |
 | 1:15 | Logo | "Second Thoughts. Your future selves weigh in before you pay." |
 

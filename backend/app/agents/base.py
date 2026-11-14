@@ -45,7 +45,8 @@ class Vote:
     def event(self) -> dict:
         return {"type": "vote", "agent": self.agent, "label": self.label, "p_regret": round(self.p_regret, 4),
                 "stake": round(self.stake, 2), "stance": self.stance, "headline": self.headline,
-                "citation": self.citation, "cite_p": round(self.cite_p, 3), "model": self.model, "ms": round(self.ms)}
+                "citation": self.citation, "cite_p": round(self.cite_p, 3), "model": self.model, "ms": round(self.ms),
+                **({"links": self.extra["links"]} if self.extra.get("links") else {})}
 
 
 REGRET_Q = "Will the buyer regret this purchase, or will it cause them a problem, within the next 30 days — judged only from your perspective?"

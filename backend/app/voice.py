@@ -16,7 +16,7 @@ URL = "https://api.deepinfra.com/v1/openai/chat/completions"
 def template(verdict: dict, votes: dict) -> str:
     item = verdict["item"]["name"]
     if verdict["veto"]:
-        return f"Budget You vetoed the {item}: it would leave rent short — wait until payday."
+        return f"The Accountant vetoed the {item}: it would leave rent short — wait until payday."
     if verdict["band"] == "buy":
         return f"All your selves are comfortable — go ahead with the {item}."
     if verdict["band"] == "buy_with_condition":

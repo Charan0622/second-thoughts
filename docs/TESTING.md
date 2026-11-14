@@ -26,7 +26,7 @@ A fresh install (no `data/private/mode.json`) is in persona mode **none**. Open 
 
 Checks for mode **mine**:
 - [ ] Upload only a bank statement. The header shows its name and free cash. The panel lists the other four slots as *not uploaded*, each with a flag.
-- [ ] Ask about an item. All four selves still vote. Goals You says it has no goal or rules on file, and Already-Own-It You has no receipts.
+- [ ] Ask about an item. All four selves still vote. The Planner says it has no goal or rules on file, and The Minimalist has no receipts.
 
 ## 2 · Demo persona (the pitch path)
 Choose **Try the demo persona (Maya)**, or open `?run=…`, which switches to the demo persona for you. The main entry is now **📷 Upload a photo of what you want to buy** (or the live camera, or 📱 Connect phone). The three demo items sit behind the small **or try an example** link, and **1 / 2 / 3** run them directly as a presenter backup. Both appear only for the demo persona.
@@ -35,10 +35,10 @@ Choose **Try the demo persona (Maya)**, or open `?run=…`, which switches to th
 |---|---|---|
 | 1 | ASICS Gel-Nimbus 27, $109.95 | 4 cards light up BUY → green **Buy it** |
 | 2 | Sony WH-1000XM6, $349 | Goals + Already-Own-It say WAIT → negotiation chips → amber **Buy — with a condition** ("Resell the earbuds … AND put $149 into the Japan fund") |
-| 3 | Apple Mac mini, $599 | **VETO** stamp on Budget You → red **Wait** ("Wait until payday (11/27)") |
+| 3 | Apple Mac mini, $599 | **VETO** stamp on The Accountant → red **Wait** ("Wait until payday (11/27)") |
 
 Check on each run:
-- [ ] Each card shows a citation; Budget You shows a **highlighted crop** of the bank statement
+- [ ] Each card shows a citation; The Accountant shows a **highlighted crop** of the bank statement
 - [ ] Gauge needle moves (and moves again after negotiation for item 2)
 - [ ] "decided in ~0.4–0.9 s"
 - [ ] **The sentence is spoken aloud**. The 🔊 / 🔇 button toggles it. Chrome only allows speech after you've interacted with the page, so click or press a key once first.
@@ -96,4 +96,4 @@ uv run python bench/run_bench.py --limit 5                # quick benchmark (ful
 | `address already in use` | `pkill -f "uvicorn app.main:app"` or `lsof -i :8000` |
 | MOCK badge with backend running | Backend must be on port 8000; restart `npm run dev` |
 | First verdict slow (~5 s) | The NDI price read on a new frame; later runs of the same frame are cached |
-| Deal You citation says "(cached)" | Expected: Keenable results are cached for 6 h |
+| The Bargain Hunter citation says "(cached)" | Expected: Keenable results are cached for 6 h |

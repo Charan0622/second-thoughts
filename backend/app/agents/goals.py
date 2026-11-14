@@ -5,7 +5,7 @@ import re
 from .. import drex, facts as F
 from .base import Item, Vote, ask_council_member, build_state, pick_citation
 
-LABEL = "Goals You"
+LABEL = "The Planner"
 RULE_LIMIT = 200.0  # demo default; real limits are parsed from the rule text
 GADGET_WORDS = ("gadget", "electronic", "tech", "device")
 SCOPES = {"gadget": ("headphones", "computer", "gadget"), "clothing": ("clothing",), "running": ("running_gear",)}

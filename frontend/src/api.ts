@@ -27,7 +27,10 @@ export interface PerceiveEvent {
   ms: number
 }
 export interface CouncilStartEvent { type: 'council_start'; agents: AgentId[] }
+export interface PriceLink { host: string; url: string; price: number; title?: string }
+
 export interface VoteEvent {
+  links?: PriceLink[]
   type: 'vote'
   agent: AgentId
   label: string

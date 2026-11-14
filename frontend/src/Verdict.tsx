@@ -78,7 +78,7 @@ export function Clarity({ state, onBack, onAgain }: { state: RunState; onBack: (
 
 interface Props { state: RunState; muted: boolean; setMuted: (v: boolean) => void; mock: boolean; onInspect: (a: AgentId) => void }
 
-const MOCK_CLERK = 'The council split two-two in round one: Budget You and Deal You were comfortable, but Goals You flagged your own rule — no gadgets over $200 before Japan — and Already-Own-It You found the $179 Pulse Pro earbuds you bought in March. The deciding move was the trade-off: resell those earbuds and put $149 into the Japan fund. With that, both dissenters dropped to under 5% regret, so the pooled verdict flipped from Wait to Buy with a condition.'
+const MOCK_CLERK = 'The council split two-two in round one: The Accountant and The Bargain Hunter were comfortable, but The Planner flagged your own rule — no gadgets over $200 before Japan — and The Minimalist found the $179 Pulse Pro earbuds you bought in March. The deciding move was the trade-off: resell those earbuds and put $149 into the Japan fund. With that, both dissenters dropped to under 5% regret, so the pooled verdict flipped from Wait to Buy with a condition.'
 
 type Clerk = { state: 'idle' } | { state: 'loading' } | { state: 'done'; text: string } | { state: 'error'; text: string }
 

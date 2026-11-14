@@ -8,10 +8,10 @@ Built at **Drexathon 2026** · Track 2: **Swarm Intelligence** (Drex makes every
 
 | Self | Grounded in | Asks |
 |---|---|---|
-| 💳 **Budget You** | Bank statement (PDF), pay stub (photo) | Can I afford this before payday once the scheduled bills are paid? **Holds a veto.** |
-| 🗾 **Goals You** | Savings tracker (XLSX), transcript of my own spending rules (TXT) | Does it delay my goal or break my own rule? |
-| 🧾 **Already-Own-It You** | Receipt email (EML), paper receipt (photo) | Do I already own something like this? |
-| 🏷️ **Deal You** | Live web via Keenable | Is this a good price, or will waiting (Black Friday) win? |
+| 💳 **The Accountant** | Bank statement (PDF), pay stub (photo) | Can I afford this before payday once the scheduled bills are paid? **Holds a veto.** |
+| 🗾 **The Planner** | Savings tracker (XLSX), transcript of my own spending rules (TXT) | Does it delay my goal or break my own rule? |
+| 🧾 **The Minimalist** | Receipt email (EML), paper receipt (photo) | Do I already own something like this? |
+| 🏷️ **The Bargain Hunter** | Live web via Keenable | Is this a good price, or will waiting (Black Friday) win? |
 
 ## Demo
 
@@ -54,7 +54,7 @@ flowchart LR
 
 **The code computes the numbers. Drex judges them.** Free cash, headroom, hours of work and Japan-slip days are computed in Python and put into the `state`. Drex never does arithmetic. In the risk spikes, `drex-v2.0` put P(unpayable) at 0.52 for a $349 item against $425 free cash. With the computed headroom in the state, `drex-max-v1.1` gives 0.005.
 
-**Veto:** Budget You's `bill_unpayable ≥ 0.93` forces Wait. Nace reports that when Drex Max is at least 93% sure, it is right 97% of the time.
+**Veto:** The Accountant's `bill_unpayable ≥ 0.93` forces Wait. Nace reports that when Drex Max is at least 93% sure, it is right 97% of the time.
 
 **Pooling:** weighted mean of `logit(p_regret)`, weights = stake. Bands: `< 0.35` Buy · `0.35–0.65` Buy with condition · `> 0.65` Wait.
 
@@ -97,7 +97,7 @@ How we got here: our first benchmark claimed 90%. An internal adversarial review
 | **Drex** (System One) | Perceive (Drex Max, image), all 4 votes, the veto, the citation choice, the negotiation scoring. That's 5–9 calls per verdict at about 350 ms median |
 | **NDI** | Extracts all 6 persona documents (PDF, 2 photos, XLSX, EML, TXT) with page/bbox citations, which become the highlighted crops; reads the price tag from the camera frame |
 | **Intern** | **In the product:** the Clerk, run headless (`intern -p --json`). It writes the persona facts summary at setup ([`docs/clerk_summary.md`](docs/clerk_summary.md)) and explains split verdicts in ~4 s. **As a coding agent:** given `AGENTS.md` as its spec, it wrote [`backend/tests/test_council_math.py`](backend/tests/test_council_math.py) (12 tests of the pooling, bands and trade-offs; 8 turns, 17 Drex System 1 decisions) |
-| **Keenable** | Live web prices and Black Friday signals for Deal You, cached per query |
+| **Keenable** | Live web prices and Black Friday signals for The Bargain Hunter, cached per query |
 | **DeepInfra** | Qwen writes the spoken verdict sentence; Qwen3.8-Max is the frontier baseline in the benchmark |
 
 The live **usage ledger** in the UI shows calls, median latency and dollars per tool (`GET /api/ledger`).
