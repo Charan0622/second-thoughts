@@ -2,11 +2,59 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AGENTS, fetchExplain, type AgentId, type Band, type NegotiationEvent } from './api'
 import type { RunState } from './App'
-import { AGENT_META } from './Council'
+import { AGENT_META, positionOf } from './Council'
 import Gauge from './Gauge'
 
-const MARK: Record<Band, string> = { buy: '✓', buy_with_condition: '◐', wait: '✕' }
-const EASE = [0.16, 1, 0.3, 1] as const
+
+/** The words the stage resolves into. The backend's own title is shown beneath. */
+export const CLARITY: Record<Band, { big: string; small?: string }> = {
+  buy: { big: 'Buy it.' },
+  buy_with_condition: { big: 'Yes.', small: 'With a condition.' },
+  wait: { big: 'Not yet.' },
+}
+
+/* ---------- Act V · Clarity: the verdict takes over the stage ---------- */
+
+export function Clarity({ state, onBack, onAgain }: { state: RunState; onBack: () => void; onAgain: () => void }) {
+  const v = state.verdict!
+  const c = CLARITY[v.band]
+  const moved = AGENTS.filter((a) => positionOf(state, a).moved)
+  const price = v.item?.price ?? state.perceive?.price ?? null
+  const name = v.item?.name ?? state.perceive?.item_name
+  return (
+    <section className={`clarity band-${v.band}`} aria-label="The verdict" aria-live="assertive">
+      <div className="clarity-inner">
+        <p className="clarity-eyebrow">
+          {name}{price != null ? ` · $${price.toLocaleString('en-US')}` : ''} · decided in {((v.council_ms ?? v.total_ms) / 1000).toFixed(2)} s
+        </p>
+        <h2 className="clarity-word rise" style={{ animationDelay: '100ms' }}>
+          {c.big}{c.small && <em> {c.small}</em>}
+        </h2>
+        {v.condition && (
+          <p className="clarity-condition enter" style={{ animationDelay: '350ms' }}>{v.condition}</p>
+        )}
+
+        <dl className="clarity-facts enter" style={{ animationDelay: '550ms' }}>
+          <div><dd>{v.price_terms.hours_of_work.toFixed(1)}<small>h</small></dd><dt>of your work</dt></div>
+          <div><dd>{v.price_terms.japan_slip_days}<small>d</small></dd><dt>Japan slips</dt></div>
+          <div><dd>{v.price_terms.pct_free_cash}<small>%</small></dd><dt>of free cash before payday</dt></div>
+        </dl>
+
+        <p className="clarity-why enter" style={{ animationDelay: '750ms' }}>
+          {state.sentence ? <>“{state.sentence.text}”<span>{state.sentence.source === 'deepinfra' ? 'DeepInfra' : 'template'}</span></>
+            : <>Council: {v.title} · first vote {v.tally.buy} buy, {v.tally.wait} wait{moved.length ? ` · ${moved.map((a) => AGENT_META[a].label).join(' and ')} moved` : ''}</>}
+        </p>
+
+        <div className="clarity-actions">
+          <button className="cta-quiet on-dark" onClick={onBack}>See how they decided</button>
+          <button className="cta-quiet on-dark" onClick={onAgain}>Ask about something else</button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ---------- How they decided: split, scale, negotiation, the Clerk ---------- */
 
 interface Props { state: RunState; muted: boolean; setMuted: (v: boolean) => void; mock: boolean; onInspect: (a: AgentId) => void }
 
@@ -30,122 +78,59 @@ export default function Verdict({ state, muted, setMuted, mock, onInspect }: Pro
     clerkAbort.current = ctl
     setClerk({ state: 'loading' })
     try {
-      const text = mock
-        ? await new Promise<string>((r) => setTimeout(() => r(MOCK_CLERK), 2500))
-        : await fetchExplain(ctl.signal)
+      const text = mock ? await new Promise<string>((r) => setTimeout(() => r(MOCK_CLERK), 2500)) : await fetchExplain(ctl.signal)
       if (!ctl.signal.aborted) setClerk({ state: 'done', text })
     } catch (e) {
       if (!ctl.signal.aborted) setClerk({ state: 'error', text: e instanceof Error ? e.message : String(e) })
     }
   }
 
-  // When the verdict lands, bring it into view (it is the answer the person came for).
-  const sectionRef = useRef<HTMLElement>(null)
-  const runWithVerdict = v ? state.runId : null
-  useEffect(() => {
-    if (runWithVerdict == null) return
-    const el = sectionRef.current
-    if (!el) return
-    const t = setTimeout(() => {
-      const top = el.getBoundingClientRect().top
-      if (top > window.innerHeight * 0.55) {
-        const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        window.scrollTo({ top: window.scrollY + top - 16, behavior: reduce ? 'auto' : 'smooth' })
-      }
-    }, 650)
-    return () => clearTimeout(t)
-  }, [runWithVerdict])
-
   const busy = state.phase === 'perceiving' || state.phase === 'council' || state.phase === 'pooled'
   const voted = AGENTS.filter((a) => state.votes[a])
   const buyers = voted.filter((a) => state.votes[a]!.stance === 'buy')
   const waiters = voted.filter((a) => state.votes[a]!.stance === 'wait')
 
+  if (!voted.length && state.phase !== 'error') return null
+
   return (
-    <section ref={sectionRef} className={`resolution ${v ? `is-resolved band-${v.band}` : ''}`} aria-label="The verdict" aria-live="polite">
-      <div className="resolution-inner">
-        {/* 03 · Disagreement: who is on which side, as soon as votes land */}
+    <section className="decided" aria-label="How they decided">
+      <div className="decided-inner">
+        <header className="decided-head">
+          <h2>{v ? 'How they decided' : busy ? 'Your selves are deciding' : 'The council'}</h2>
+          {v && <p className="decided-title">Council verdict: <b>{v.title}</b>{v.condition ? ` · ${v.condition}` : ''}</p>}
+          {state.phase === 'error' && <p className="decided-error">The council couldn’t finish: {state.error ?? 'try again.'}</p>}
+        </header>
+
         {voted.length > 0 && (
           <div className="split">
-            <p className="label">{state.phase === 'council' ? 'The selves are voting' : 'Round one'}</p>
+            <p className="label">Round one</p>
             <p className="split-line">
-              <span className="split-side"><b>{buyers.length}</b> buy {buyers.length > 0 && <Names ids={buyers} />}</span>
-              <span className="split-vs" aria-hidden>·</span>
-              <span className="split-side"><b>{waiters.length}</b> wait {waiters.length > 0 && <Names ids={waiters} />}</span>
+              <span><b>{buyers.length}</b> buy {buyers.map((a) => <Name key={a} a={a} onInspect={onInspect} />)}</span>
+              <span><b>{waiters.length}</b> wait {waiters.map((a) => <Name key={a} a={a} onInspect={onInspect} />)}</span>
             </p>
             <Gauge state={state} />
           </div>
         )}
 
-        {/* 04 · Negotiation: only what the backend actually evaluated */}
-        <AnimatePresence>
-          {state.negotiation && <Negotiation n={state.negotiation} />}
-        </AnimatePresence>
+        <AnimatePresence>{state.negotiation && <Negotiation n={state.negotiation} />}</AnimatePresence>
 
-        {/* 05 · Verdict: never gated on an exit animation */}
-        {v ? (
-            <motion.div key={`v-${state.runId}`} className="verdict" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-              <div className="verdict-main">
-                <p className="label">The verdict · decided in {((v.council_ms ?? v.total_ms) / 1000).toFixed(2)} s</p>
-                <motion.h2 className="verdict-title" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE }}>
-                  <span className="verdict-mark" aria-hidden>{MARK[v.band]}</span>{/[.!?]$/.test(v.title) ? v.title : `${v.title}.`}
-                </motion.h2>
-                {v.condition && (
-                  <motion.p className="verdict-condition" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE, delay: 0.25 }}>
-                    <span className="label">The condition</span>{v.condition}
-                  </motion.p>
-                )}
-                <AnimatePresence>
-                  {state.sentence && (
-                    <motion.p className="sentence" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6 }}>
-                      “{state.sentence.text}”
-                      <span className="sentence-src">{state.sentence.source === 'deepinfra' ? 'Written by DeepInfra' : 'Template sentence'}</span>
-                    </motion.p>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              <motion.dl className="terms" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE, delay: 0.35 }}>
-                <p className="label">What it costs you</p>
-                <div><dt>hours of work</dt><dd>{v.price_terms.hours_of_work.toFixed(1)}</dd></div>
-                <div><dt>days Japan slips</dt><dd>{v.price_terms.japan_slip_days}</dd></div>
-                <div><dt>of your free cash</dt><dd>{v.price_terms.pct_free_cash}<small>%</small></dd></div>
-              </motion.dl>
-
-              <div className="verdict-foot">
-                <span className="inspect">
-                  Inspect a self:
-                  {voted.map((a) => (
-                    <button key={a} className="chip" style={{ ['--a' as string]: `var(--${a})` }} onClick={() => onInspect(a)}>
-                      <span aria-hidden>{AGENT_META[a].glyph}</span> {AGENT_META[a].label}
-                    </button>
-                  ))}
-                </span>
-                <span className="tools">
-                  {state.phase === 'done' && (
-                    <button className="ghost" onClick={askClerk} disabled={clerk.state === 'loading'}>
-                      {clerk.state === 'loading' ? 'The Clerk is reading…' : 'Ask the Clerk why'} <small>Intern</small>
-                    </button>
-                  )}
-                  <button className="ghost" onClick={() => setMuted(!muted)} aria-pressed={muted}>{muted ? 'Voice off' : 'Voice on'}</button>
-                </span>
-              </div>
-            </motion.div>
-          ) : (
-            <p className="waiting">
-              {state.phase === 'error'
-                ? <>The council couldn’t finish. <span>{state.error ?? 'Try again.'}</span></>
-                : busy ? (voted.length ? 'Weighing the votes…' : 'Your selves are reading your documents…')
-                : 'Hold that thought. Ask your selves before you pay.'}
-            </p>
-          )}
+        {v && (
+          <div className="decided-tools">
+            {state.phase === 'done' && (
+              <button className="cta-quiet" onClick={askClerk} disabled={clerk.state === 'loading'}>
+                {clerk.state === 'loading' ? 'The Clerk is reading…' : 'Ask the Clerk why'} <small>Intern</small>
+              </button>
+            )}
+            <button className="cta-quiet" onClick={() => setMuted(!muted)} aria-pressed={muted}>{muted ? 'Voice off' : 'Voice on'}</button>
+          </div>
+        )}
 
         <AnimatePresence>
           {(clerk.state === 'done' || clerk.state === 'error') && (
-            <motion.aside className={`clerk ${clerk.state === 'error' ? 'is-error' : ''}`} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}>
-              <p className="label">The Clerk explains · Intern{mock ? ' · mock' : ''}</p>
+            <motion.aside className={`clerk ${clerk.state === 'error' ? 'is-error' : ''}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <p className="label">The Clerk explains · Intern{mock ? ' · simulated' : ''}</p>
               <p>{clerk.text}</p>
-              <button className="ghost" onClick={() => setClerk({ state: 'idle' })}>Close</button>
+              <button className="cta-quiet" onClick={() => setClerk({ state: 'idle' })}>Close</button>
             </motion.aside>
           )}
         </AnimatePresence>
@@ -154,46 +139,42 @@ export default function Verdict({ state, muted, setMuted, mock, onInspect }: Pro
   )
 }
 
-function Names({ ids }: { ids: AgentId[] }) {
+function Name({ a, onInspect }: { a: AgentId; onInspect: (a: AgentId) => void }) {
   return (
-    <span className="names">
-      {ids.map((a) => <span key={a} className="name" style={{ ['--a' as string]: `var(--${a})` }}>{AGENT_META[a].label}</span>)}
-    </span>
+    <button className="name" style={{ ['--a' as string]: `var(--${a})` }} onClick={() => onInspect(a)}>
+      <span className={`mark mark-${a}`} aria-hidden />{AGENT_META[a].label}
+    </button>
   )
 }
 
 function Negotiation({ n }: { n: NegotiationEvent }) {
-  const scored = n.offers.map((o) => ({ ...o, p: n.pooled_by_offer?.[o.id] }))
   return (
-    <motion.div className="negotiation" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.5, ease: EASE }}>
+    <div className="negotiation enter">
       <p className="label">The negotiation · {n.offers.length} compromises evaluated</p>
       <ol className="offers">
-        {scored.map((o, i) => {
+        {n.offers.map((o, i) => {
+          const p = n.pooled_by_offer?.[o.id]
           const chosen = o.id === n.chosen.id
           return (
-            <motion.li key={o.id} className={`offer ${chosen ? 'is-chosen' : ''}`}
-              initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, ease: EASE, delay: 0.06 * i }}>
+            <li key={o.id} className={`offer ${chosen ? 'is-chosen' : ''} enter`} style={{ animationDelay: `${50 * i}ms` }}>
               <span className="offer-label">{o.label}</span>
-              {o.p != null ? (
-                <span className="offer-p" aria-label={`pooled regret ${o.p.toFixed(2)}`}>
-                  <span className="offer-bar"><motion.span initial={{ width: 0 }} animate={{ width: `${o.p * 100}%` }} transition={{ duration: 0.6, ease: EASE, delay: 0.06 * i + 0.1 }} /></span>
-                  {o.p.toFixed(2)}
-                </span>
-              ) : <span className="offer-p offer-na">not scored</span>}
+              {p != null ? (
+                <span className="offer-p"><span className="offer-bar"><span style={{ width: `${p * 100}%` }} /></span>{p.toFixed(2)}</span>
+              ) : <span className="offer-p muted">not scored</span>}
               {chosen && <span className="offer-chosen">Chosen</span>}
-            </motion.li>
+            </li>
           )
         })}
       </ol>
       {n.picks.length > 0 && (
         <p className="who-moved">
           {n.picks.map((p) => (
-            <span key={p.agent} className="name" style={{ ['--a' as string]: `var(--${p.agent})` }}>
-              {AGENT_META[p.agent].label} <span className="num">{p.p_before.toFixed(2)} → {p.p_after.toFixed(2)}</span>
+            <span key={p.agent} style={{ ['--a' as string]: `var(--${p.agent})` }}>
+              <span className={`mark mark-${p.agent}`} aria-hidden />{AGENT_META[p.agent].label} <span className="num">{p.p_before.toFixed(2)} → {p.p_after.toFixed(2)}</span>
             </span>
           ))}
         </p>
       )}
-    </motion.div>
+    </div>
   )
 }
