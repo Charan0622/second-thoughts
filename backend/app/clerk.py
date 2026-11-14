@@ -6,6 +6,7 @@ Intern never votes or decides; it writes prose. Every run is logged in the ledge
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import shutil
@@ -15,6 +16,7 @@ from . import ledger
 from .config import DEEPINFRA_API_KEY, NACE_API_KEY, PRIVATE, ROOT
 
 SUMMARY = PRIVATE / "clerk_summary.md"
+CACHE = PRIVATE / "clerk_cache.json"  # explanations keyed by the exact prompt (same votes → same paragraph)
 SYSTEM1 = "drex-latest"
 SYSTEM2 = "deepinfra/Qwen/Qwen3.8-27B"
 
@@ -82,4 +84,13 @@ async def explain(verdict: dict, votes: list[dict]) -> dict:
               + (f" with condition '{verdict['condition']}'" if verdict.get("condition") else "")
               + f". Votes:\n{lines}\n\nWrite one short paragraph (max 80 words) for Maya explaining why the selves disagreed "
                 "and why the condition resolves it. Only use the facts given. Reply with the paragraph only; do not create files.")
-    return await run(prompt, timeout=75, note="explain split verdict", quick=True)
+    key = hashlib.sha256(prompt.encode()).hexdigest()[:20]
+    cache = json.loads(CACHE.read_text()) if CACHE.exists() else {}
+    if key in cache:
+        return {"ok": True, "text": cache[key], "cached": True}
+    res = await run(prompt, timeout=90, note="explain split verdict", quick=True)
+    if res.get("ok") and res.get("text"):
+        cache = json.loads(CACHE.read_text()) if CACHE.exists() else {}
+        cache[key] = res["text"]
+        CACHE.write_text(json.dumps(cache, indent=1))
+    return res
