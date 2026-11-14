@@ -115,6 +115,9 @@ async def web_price(name: str) -> dict | None:
                 found.append((p, res.get("host") or "web", res.get("url") or ""))
     if not found:
         return None
+    shops = [f for f in found if keenable_client.is_retailer(f[1])]
+    if shops:   # price it from real stores when we can; never show aggregator or article links
+        found = shops
     ps = sorted(p for p, _, _ in found)
     med = ps[len(ps) // 2]
     keep = [(p, h, u) for p, h, u in found if 0.6 * med <= p <= 1.6 * med]
@@ -124,9 +127,10 @@ async def web_price(name: str) -> dict | None:
     typical = kp[len(kp) // 2]
     seen_hosts, sources = set(), []
     for p, h, u in sorted(keep, key=lambda x: abs(x[0] - typical)):
-        if h not in seen_hosts:
+        if h not in seen_hosts and keenable_client.is_retailer(h):
             seen_hosts.add(h)
             sources.append({"host": h, "price": p, "url": u})
+    sources.sort(key=lambda x: x["price"])   # cheapest legit store first
     return {"suggested_price": round(typical, 2), "sources": sources[:4], "n": len(kp), "query": f"{name} price"}
 
 

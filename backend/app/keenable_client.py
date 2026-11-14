@@ -60,6 +60,24 @@ def _parse(resp, item_price: float | None) -> dict:
             "black_friday_mentioned": any("black friday" in (r["title"] + r["snippet"]).lower() for r in results)}
 
 
+RETAILERS = (
+    "amazon.com", "bestbuy.com", "walmart.com", "target.com", "apple.com", "costco.com", "samsclub.com", "newegg.com",
+    "bhphotovideo.com", "adorama.com", "microcenter.com", "gamestop.com", "staples.com", "officedepot.com", "dell.com",
+    "lenovo.com", "hp.com", "microsoft.com", "samsung.com", "sony.com", "bose.com", "store.google.com", "nintendo.com",
+    "rei.com", "nike.com", "adidas.com", "asics.com", "brooksrunning.com", "hoka.com", "dickssportinggoods.com",
+    "zappos.com", "roadrunnersports.com", "runningwarehouse.com", "footlocker.com", "lululemon.com", "patagonia.com",
+    "nordstrom.com", "macys.com", "kohls.com", "jcpenney.com", "homedepot.com", "lowes.com", "wayfair.com", "ikea.com",
+    "crateandbarrel.com", "williams-sonoma.com", "yeti.com", "kroger.com", "walgreens.com", "cvs.com", "sephora.com",
+    "ulta.com", "chewy.com", "barnesandnoble.com", "garmin.com", "dyson.com", "ninjakitchen.com", "kitchenaid.com",
+)
+
+
+def is_retailer(host: str) -> bool:
+    """A real store we'd send someone to — not an aggregator card, redirect, review article or marketplace reseller."""
+    h = (host or "").lower().removeprefix("www.")
+    return any(h == r or h.endswith("." + r) for r in RETAILERS)
+
+
 JUNK_CTX = re.compile(r"(off|save|saving|discount|increase|gst|vat|/\s?mo|per month|a month|monthly|shipping|coupon|credit)", re.I)
 
 

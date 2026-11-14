@@ -121,7 +121,7 @@ async def vote(item: Item, snaps: list[dict], extra: str | None = None) -> Vote:
     links, seen = [], set()
     for r in hits:   # where each price was seen, cheapest first — shown as clickable links in the UI
         ps = keenable_client.prices_near(r["title"] + " " + r["snippet"], item.price)
-        if ps and r.get("url") and r["url"] not in seen:
+        if ps and r.get("url") and r["url"] not in seen and keenable_client.is_retailer(r.get("host", "")):
             seen.add(r["url"])
             links.append({"host": r.get("host") or "web", "url": r["url"], "price": min(ps), "title": r["title"][:90]})
     links.sort(key=lambda x: x["price"])
