@@ -9,7 +9,8 @@ import {
 import { MOCK_DEMO_ITEMS, MOCK_PERSONA, mockVerdict } from './mock'
 import Camera from './Camera'
 import Council, { Evidence } from './Council'
-import Verdict from './Verdict'
+import Verdict, { Clarity } from './Verdict'
+import Landing from './Landing'
 import Ledger from './Ledger'
 
 export type Phase = 'idle' | 'perceiving' | 'council' | 'pooled' | 'done' | 'error'
@@ -70,6 +71,9 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [ready, setReady] = useState(false)
   const [inspect, setInspect] = useState<AgentId | null>(null)
+  const startParams = new URLSearchParams(window.location.search)
+  const [view, setView] = useState<'landing' | 'app'>(startParams.has('run') || startParams.has('app') ? 'app' : 'landing')
+  const [clarity, setClarity] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const captureRef = useRef<(() => void) | null>(null)
   const mutedRef = useRef(muted)
@@ -113,6 +117,7 @@ export default function App() {
     abortRef.current = ctl
     if ('speechSynthesis' in window) window.speechSynthesis.cancel()
     setInspect(null)
+    setClarity(false)
     dispatch({ kind: 'reset' })
     try {
       const stream = mock ? mockVerdict(req, ctl.signal) : streamVerdict(req, ctl.signal)
@@ -158,6 +163,7 @@ export default function App() {
     abortRef.current?.abort()
     setSelected(id)
     setInspect(null)
+    setClarity(false)
     dispatch({ kind: 'clear' })
   }, [selected, state.phase])
 
@@ -165,7 +171,8 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName
-      if (e.key === 'Escape') { setInspect(null); return }
+      if (e.key === 'Escape') { setInspect(null); setClarity(false); return }
+      if (view !== 'app') return
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || e.metaKey || e.ctrlKey) return
       const idx = ['1', '2', '3'].indexOf(e.key)
       if (idx >= 0 && demoMode) { e.preventDefault(); runDemo(DEMO_IDS[idx]) }
@@ -177,7 +184,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [demoMode, runDemo, selected, ask])
+  }, [demoMode, runDemo, selected, ask, view])
 
   // ?run=shoes|headphones|macmini auto-starts a demo once live/mock is decided.
   const autoRan = useRef(false)
@@ -192,29 +199,53 @@ export default function App() {
     if (muted && 'speechSynthesis' in window) window.speechSynthesis.cancel()
   }, [muted])
 
+  // Act V: once the verdict exists, let the council's final positions register, then resolve the stage.
+  // A timer, not an animation dependency: the verdict is already in state and in "How they decided".
+  const verdictRun = state.verdict ? state.runId : null
+  const negotiated = !!state.negotiation
+  useEffect(() => {
+    if (verdictRun == null) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const t = setTimeout(() => {
+      setClarity(true)
+      document.querySelector('.arena')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+    }, reduce ? 0 : negotiated ? 1700 : 900)
+    return () => clearTimeout(t)
+  }, [verdictRun, negotiated])
+
   const stage = state.verdict ? 'resolved'
     : state.negotiation ? 'negotiating'
     : Object.keys(state.votes).length ? 'disagreeing'
     : state.phase === 'idle' || (state.phase === 'error' && !state.perceive) ? 'desire'
     : 'awakening'
 
+  const item = items.find((i) => i.id === selected)
+
+  if (view === 'landing') {
+    return (
+      <MotionConfig reducedMotion="user">
+        <Landing item={item} mock={mock}
+          onStart={() => setView('app')}
+          onDemo={() => { setView('app'); runDemo(selected) }} />
+      </MotionConfig>
+    )
+  }
+
   return (
     <MotionConfig reducedMotion="user">
       <div className={`app stage-${stage}`} data-band={state.verdict?.band ?? ''}>
         <header className="mast">
-          <div className="brand">
-            <span className="brand-mark" aria-hidden><i /><i /></span>
-            <span className="brand-name">Second Thoughts</span>
-            <span className="brand-tag">Your future selves weigh in before you pay.</span>
-          </div>
+          <button className="wordmark" onClick={() => { abortRef.current?.abort(); setView('landing'); dispatch({ kind: 'clear' }); setClarity(false) }} aria-label="Second Thoughts: back to start">
+            <span className="brand-mark" aria-hidden><i /><i /></span>Second Thoughts
+          </button>
           <PersonaLine persona={persona} />
           <span className={`source ${mock ? 'source-mock' : 'source-live'}`} title={mock ? 'Backend not reachable: replaying recorded fixture events' : 'Connected to the live backend'}>
             {mock ? 'Mock fixtures' : 'Live'}
           </span>
         </header>
 
-        <main className="chamber">
-          <Council state={state} side="left" agents={['budget', 'goals']} onInspect={setInspect} inspecting={inspect} />
+        <main className="arena" data-act={stage}>
+          <Council state={state} persona={persona} onInspect={setInspect} inspecting={inspect} />
           <Camera
             demoMode={demoMode}
             setDemoMode={setDemoMode}
@@ -231,7 +262,16 @@ export default function App() {
             busy={busy}
             resolved={!!state.verdict}
           />
-          <Council state={state} side="right" agents={['owned', 'deal']} onInspect={setInspect} inspecting={inspect} />
+          {state.negotiation && !state.verdict && (
+            <motion.p className="act-note" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+              Negotiating · {state.negotiation.chosen.label}
+            </motion.p>
+          )}
+          <AnimatePresence>
+            {clarity && state.verdict && (
+              <Clarity key={state.runId} state={state} onBack={() => setClarity(false)} onAgain={() => { setClarity(false); choose(selected === 'shoes' ? 'headphones' : selected === 'headphones' ? 'macmini' : 'shoes') }} />
+            )}
+          </AnimatePresence>
         </main>
 
         <Verdict state={state} muted={muted} setMuted={setMuted} mock={mock} onInspect={setInspect} />
