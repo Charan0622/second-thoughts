@@ -43,7 +43,7 @@ def on_topic_prices(item: Item, snaps: list[dict]) -> tuple[list[float], list[di
     """Prices only from '<name> price' results whose title shares ≥2 name tokens (or 1 if the name has only 1)."""
     toks = _tokens(item.name)
     need = 1 if len(toks) <= 1 else 2
-    prices, hits = [], []
+    prices, hits, shop_prices = [], [], []
     for s in snaps:
         if "black friday" in s.get("query", "").lower():
             continue
@@ -54,7 +54,10 @@ def on_topic_prices(item: Item, snaps: list[dict]) -> tuple[list[float], list[di
                 if ps:
                     prices += ps
                     hits.append(r)
-    return prices, hits
+                    if keenable_client.is_retailer(r.get("host", "")):
+                        shop_prices += ps
+    # headline + typical price from real retailers when there are enough of them
+    return (shop_prices if len(shop_prices) >= 2 else prices), hits
 
 
 def web_facts(item: Item, snaps: list[dict]) -> tuple[list[Fact], list[str]]:
@@ -68,7 +71,7 @@ def web_facts(item: Item, snaps: list[dict]) -> tuple[list[Fact], list[str]]:
                        doc=r["url"] or r["host"], doc_label=label, quote=(r["snippet"] or r["title"])[:220]))
     computed = [f"Black Friday is {BLACK_FRIDAY} — {_days_to(BLACK_FRIDAY)} days away.",
                 f"Even a generous 20% discount would save only about ${0.2 * item.price:,.0f} on this item."]
-    if len(prices) >= 3:
+    if len(prices) >= 2:
         lo = typical_low(prices)
         computed.append(f"Prices for this exact product on the live web: {len(prices)} mentions; typical low (25th percentile) "
                         f"${lo:,.2f}. The asking price is ${item.price:,.2f}.")
@@ -103,7 +106,7 @@ async def vote(item: Item, snaps: list[dict], extra: str | None = None) -> Vote:
     if getattr(item, "name_source", "ndi") == "category":
         return _abstain(item, "Couldn't identify the exact product — no price check (not counted)")
     prices, _ = on_topic_prices(item, snaps)
-    if len(prices) < 3:
+    if len(prices) < 2:
         return _abstain(item, "Not enough reliable prices online for this product (not counted)")
     fs, computed = web_facts(item, snaps)
     if extra:
