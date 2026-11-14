@@ -139,7 +139,7 @@ async def upload_doc(slot: str, files: list[UploadFile] = File(...)):
         raise HTTPException(404, f"unknown slot '{slot}'")
     d = F.MY_DOCS / slot
     blobs = []
-    for i, f in enumerate(files[:5]):  # validate everything before touching the slot
+    for i, f in enumerate(files[:10]):  # validate everything before touching the slot
         name = Path(f.filename or f"upload_{i}").name
         ext = Path(name).suffix.lower()
         if ext not in ALLOWED:
@@ -150,11 +150,33 @@ async def upload_doc(slot: str, files: list[UploadFile] = File(...)):
         safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in name)[:80] or f"upload_{i}{ext}"
         blobs.append((safe, data))
     async with _docs_lock:
-        shutil.rmtree(d, ignore_errors=True)
+        if slot != "receipts":            # receipts accumulate: every new receipt adds to what you own
+            shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True, exist_ok=True)
+        if slot == "receipts" and len(list(d.glob("*"))) + len(blobs) > 30:
+            raise HTTPException(413, "More than 30 receipts — remove some first")
         for safe, data in blobs:
             (d / safe).write_bytes(data)
         F.set_mode("mine")          # any upload switches to "your documents only"
+        return await F.load()
+
+
+@app.get("/api/profile")
+async def get_profile():
+    """Your answers to the quick questions + what we inferred from your bank statement."""
+    return {"profile": F.load_profile(), "suggested": {"goal_monthly": F.suggested_monthly_saving()}}
+
+
+@app.post("/api/profile")
+async def set_profile(body: dict):
+    keep = {"goal_name", "goal_target", "goal_saved", "goal_monthly", "goal_date", "rules"}
+    prof = {k: v for k, v in body.items() if k in keep}
+    if isinstance(prof.get("rules"), str):
+        prof["rules"] = [r.strip() for r in prof["rules"].splitlines() if r.strip()]
+    prof["rules"] = [str(r)[:200] for r in (prof.get("rules") or [])][:10]
+    async with _docs_lock:
+        F.save_profile(prof)
+        F.set_mode("mine")
         return await F.load()
 
 

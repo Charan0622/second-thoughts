@@ -94,6 +94,7 @@ class Persona:
     owned: list[dict] = field(default_factory=list)        # [{item, price, date, return_policy, warranty}]
     today: str = TODAY
     flags: list[str] = field(default_factory=list)          # fields that fell back to demo values
+    goal_source: str = "docs"                                 # "docs" | "answers"
 
     @property
     def net_hourly(self) -> float:
@@ -158,7 +159,9 @@ SLOT_SCHEMAS: dict[str, dict] = {
             "date": {"type": "string"}, "payee": {"type": "string"}, "amount": {"type": "number"}})},
         "food_delivery": {"type": "array", "description": "Every food-delivery or takeout transaction (DoorDash, UberEats, Grubhub…)", "items": S({
             "date": {"type": "string"}, "merchant": {"type": "string"}, "amount": {"type": "number"}})},
-        "next_deposit_date": {"type": "string", "description": "Next expected direct deposit date, YYYY-MM-DD"}},
+        "next_deposit_date": {"type": "string", "description": "Next expected direct deposit date, YYYY-MM-DD"},
+        "savings_transfers": {"type": "array", "description": "Every transfer into a savings account or savings goal (past or scheduled)",
+                              "items": S({"date": {"type": "string"}, "amount": {"type": "number"}, "description": {"type": "string"}})}},
         req=["available_balance", "scheduled_payments"]),
     "paystub": S({
         "hourly_rate": {"type": "number"}, "pay_frequency": {"type": "string"},
@@ -178,7 +181,7 @@ DEMO_DOCS: dict[str, list[str]] = {"bank": ["bank_statement.pdf"], "paystub": ["
                                    "rules": ["rules_memo_transcript.txt"]}
 # Demo docs keep their original schemas so cached NDI results and the benchmark stay identical.
 SCHEMAS: dict[str, dict] = {
-    "bank_statement.pdf": S({k: v for k, v in SLOT_SCHEMAS["bank"]["properties"].items() if k != "account_holder"}),
+    "bank_statement.pdf": S({k: v for k, v in SLOT_SCHEMAS["bank"]["properties"].items() if k not in ("account_holder", "savings_transfers")}),
     "pay_stub.jpg": SLOT_SCHEMAS["paystub"], "savings_tracker.xlsx": SLOT_SCHEMAS["savings"],
     "receipt_email.eml": S({
         "item": {"type": "string"}, "price": {"type": "number"}, "purchase_date": {"type": "string"},
@@ -201,6 +204,33 @@ _slot_owner: dict[str, str] = {}       # slot -> "yours" | "demo"
 def my_files(slot: str) -> list[Path]:
     d = MY_DOCS / slot
     return sorted(p for p in d.glob("*") if p.is_file() and not p.name.startswith(".")) if d.exists() else []
+
+
+PROFILE_NAME = "profile.json"
+
+
+def load_profile() -> dict:
+    p = MY_DOCS / PROFILE_NAME
+    try:
+        return json.loads(p.read_text()) if p.exists() else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def save_profile(d: dict) -> None:
+    MY_DOCS.mkdir(parents=True, exist_ok=True)
+    (MY_DOCS / PROFILE_NAME).write_text(json.dumps(d, indent=1))
+
+
+def suggested_monthly_saving() -> float | None:
+    """Analyse the user's bank statement: savings transfers found in the statement period → a monthly estimate."""
+    B = _first("bank")
+    if not B or _slot_owner.get("bank") != "yours":
+        return None
+    d = _results.get(B, {}).get("data") or {}
+    tr = [_num(t.get("amount"), 0) for t in (d.get("savings_transfers") or []) if _num(t.get("amount"), 0) > 0]
+    tr += [_num(s.get("amount"), 0) for s in (d.get("scheduled_payments") or []) if "saving" in str(s.get("payee", "")).lower()]
+    return round(sum(tr), 2) if tr else None
 
 
 def active_docs(mode: str | None = None) -> dict[str, list[tuple[str, Path, str]]]:
@@ -483,7 +513,7 @@ def _build_mine() -> None:
         else:
             flags.append(f"next payday: assuming {p.next_payday} (14 days from today)")
     if not ST:
-        flags.append("No savings tracker uploaded — Goals You has no goal data")
+        flags.append("No savings goal yet — answer the quick questions so Goals You can weigh in")
     else:
         p.goal_name = str(_val(ST, "/goal", None) or "savings goal")
         p.japan_target = _num(val(ST, "/target_amount", "goal target", "savings"), 0.0)
@@ -506,8 +536,22 @@ def _build_mine() -> None:
         flags.append("receipts: no purchased item found in your receipts")
     else:
         flags.append("No receipts uploaded — Already-Own-It You has nothing to compare against")
+    prof = load_profile()
+    if prof.get("goal_name") and _num(prof.get("goal_target"), 0) > 0:
+        p.goal_name = str(prof["goal_name"])
+        p.japan_target = _num(prof.get("goal_target"), 0.0)
+        p.japan_saved = _num(prof.get("goal_saved"), 0.0)
+        p.japan_monthly = _num(prof.get("goal_monthly"), 0.0) or NO_GOAL_MONTHLY
+        p.japan_date = str(prof.get("goal_date") or "no date set")
+        flags[:] = [f for f in flags if not f.startswith(("No savings tracker", "No savings goal"))]
+        p.goal_source = "answers"
+    if prof.get("rules"):
+        p.rules, p.rules_source = [str(r) for r in prof["rules"] if str(r).strip()], "answers"
+        RM = None
+    elif not RM:
+        flags.append("No spending rules given — answer the quick questions to add some")
     if not RM:
-        flags.append("No spending rules uploaded")
+        pass
     else:
         rm = _rules_from(RM, flags)
         if rm:
@@ -561,7 +605,19 @@ def use_persona(p: Persona, crops: bool = False) -> None:
         fs["budget"].append(_fact("budget_delivery", "budget",
                                   f"{p.delivery_count} food-delivery orders this month, about ${p.avg_delivery:.0f} each.",
                                   B, "/food_delivery/0"))
-    if "savings" in miss:
+    if getattr(p, "goal_source", "") == "answers":
+        miss.discard("savings")
+    if p.rules_source == "answers":
+        miss.discard("rules")
+    if getattr(p, "goal_source", "") == "answers":
+        fs["goals"] += [
+            Fact(id="goals_target", agent="goals", text=f"{p.goal_name} goal: ${p.japan_target:,.0f} by {p.japan_date}.",
+                 doc="answers", doc_label="Your answers", quote=f"Saving for: {p.goal_name} — ${p.japan_target:,.0f} by {p.japan_date}"),
+            Fact(id="goals_saved", agent="goals", text=(f"Saved so far: ${p.japan_saved:,.0f}; contributing ${p.japan_monthly:,.0f}/month."
+                 if p.has_goal else f"Saved so far: ${p.japan_saved:,.0f}; no monthly contribution."),
+                 doc="answers", doc_label="Your answers", quote=f"Saved ${p.japan_saved:,.0f}" + (f", ${p.japan_monthly:,.0f}/month" if p.has_goal else "")),
+        ]
+    elif "savings" in miss:
         fs["goals"].append(_missing("goals_target", "goals",
                                     "No savings tracker uploaded — there is no savings goal on file, so no goal data.", "savings"))
     else:
@@ -570,8 +626,11 @@ def use_persona(p: Persona, crops: bool = False) -> None:
             _fact("goals_saved", "goals", f"Saved so far: ${p.japan_saved:,.0f}; contributing ${p.japan_monthly:,.0f}/month."
                   if p.has_goal else f"Saved so far: ${p.japan_saved:,.0f}; no monthly contribution found.", ST, "/saved_so_far"),
         ]
-    if "rules" in miss:
-        fs["goals"].append(_missing("goals_rules_none", "goals", "No spending rules uploaded — the buyer has set no rules.", "rules"))
+    if p.rules_source == "answers":
+        fs["goals"] += [Fact(id=f"goals_rule_{i}", agent="goals", text=f"My own rule: \"{r}\"", doc="answers",
+                             doc_label="Your answers", quote=r) for i, r in enumerate(p.rules)]
+    elif "rules" in miss:
+        fs["goals"].append(_missing("goals_rules_none", "goals", "No spending rules given — the buyer has set no rules.", "rules"))
     else:
         fs["goals"] += [_fact(f"goals_rule_{i}", "goals", f"My own rule (memo): \"{r}\"", RM, f"/rules/{i}")
                         for i, r in enumerate(p.rules)]

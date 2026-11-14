@@ -22,7 +22,7 @@ export default function Onboarding({ onUpload, onDemo, busy }: Props) {
       <p className="onb-sub">Your four selves need documents to argue from. Choose one to start — until then the council can’t run.</p>
       <div className="onb-actions">
         <button className="cta" onClick={onUpload} disabled={busy}>📄 Upload your documents</button>
-        <ul className="onb-list"><li>bank statement · pay stub · savings tracker · receipts · your own rules</li></ul>
+        <ul className="onb-list"><li>bank statement · pay stub · receipts + a few quick questions</li></ul>
         <button className="cta-quiet" onClick={onDemo} disabled={busy}>Try the demo persona (Maya)</button>
       </div>
     </section>
