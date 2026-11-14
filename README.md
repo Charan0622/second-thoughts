@@ -121,7 +121,7 @@ cd frontend && npm install && npm run dev      # http://localhost:5173
 
 Keys: `1` `2` `3` (or ← →) pick a demo item. `?run=headphones` (or `shoes` / `macmini`) starts a run on load.
 
-Tests: `cd backend && uv run pytest tests -q` (offline). Benchmark: `cd backend && uv run python bench/run_bench.py` (40 cards, about 5 min, about $0.20).
+Full test guide: [`docs/TESTING.md`](docs/TESTING.md). Tests: `cd backend && uv run pytest tests -q` (offline). Benchmark: `cd backend && uv run python bench/run_bench.py` (40 cards, about 5 min, about $0.20).
 
 ## Repo map
 
