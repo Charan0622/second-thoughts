@@ -85,7 +85,7 @@ flowchart LR
 |---|---|
 | **Drex** (System One) | Perceive (Drex Max, image), all 4 votes, the veto, the citation choice, the negotiation scoring. That's 5–9 calls per verdict at about 350 ms median |
 | **NDI** | Extracts all persona documents (PDF, photos, XLSX, EML, audio) with page/bbox citations, which become the highlighted crops; reads the price tag from the camera frame |
-| **Intern** | The Clerk, run headless: writes the persona facts summary at setup and explains split verdicts in ~4 s. Also used as a coding agent with `AGENTS.md` as its spec |
+| **Intern** | **In the product:** the Clerk, run headless (`intern -p --json`). It writes the persona facts summary at setup ([`docs/clerk_summary.md`](docs/clerk_summary.md)) and explains split verdicts in ~4 s. **As a coding agent:** given `AGENTS.md` as its spec, it wrote [`backend/tests/test_council_math.py`](backend/tests/test_council_math.py) (12 tests of the pooling, bands and trade-offs; 8 turns, 17 Drex System 1 decisions) |
 | **Keenable** | Live web prices and Black Friday signals for Deal You, cached per query |
 | **DeepInfra** | Qwen writes the spoken verdict sentence; Qwen3.8-Max is the frontier baseline in the benchmark |
 | **Adobe** | Firefly avatars for the four selves; Express for the slides |
@@ -110,7 +110,7 @@ cd frontend && npm install && npm run dev      # http://localhost:5173
 
 Keys: `1` `2` `3` (or ← →) pick a demo item. `?run=headphones` (or `shoes` / `macmini`) starts a run on load.
 
-Benchmark: `cd backend && uv run python bench/run_bench.py` (40 cards, about 5 min, about $0.20).
+Tests: `cd backend && uv run pytest tests -q` (offline). Benchmark: `cd backend && uv run python bench/run_bench.py` (40 cards, about 5 min, about $0.20).
 
 ## Repo map
 
