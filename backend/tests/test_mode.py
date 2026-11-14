@@ -79,7 +79,7 @@ def test_mine_mode_never_uses_demo_values(iso):
     assert p.rules == [] and p.owned == [] and not p.owned_item
     assert p.goal_name == "savings goal" and p.japan_target == 0 and not p.has_goal
     assert any("No pay stub uploaded" in f and "payday unknown" in f for f in p.flags)
-    assert any("No savings tracker" in f for f in p.flags)
+    assert any("No savings goal yet" in f for f in p.flags)
     texts = " ".join(f.text for f in F.all_facts())
     assert "Maya" not in texts and "Japan" not in texts and "Parkside" not in texts
     assert any(f.status == "missing" and f.agent == "goals" for f in F.all_facts())

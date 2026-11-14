@@ -15,12 +15,12 @@ interface Props {
 }
 
 const ORDER: { id: string; hint: string; accept: string; multiple?: boolean }[] = [
-  { id: 'bank', hint: 'Statement with balance + upcoming bills', accept: '.pdf,.jpg,.jpeg,.png,.webp,.csv,.xlsx' },
-  { id: 'paystub', hint: 'Pay stub (rate, next pay date)', accept: '.pdf,.jpg,.jpeg,.png,.webp' },
-  { id: 'savings', hint: 'Savings goal tracker', accept: '.xlsx,.xls,.csv,.pdf,.jpg,.png' },
-  { id: 'receipts', hint: 'Receipts for things you own (up to 5)', accept: '.pdf,.eml,.jpg,.jpeg,.png,.webp,.txt', multiple: true },
-  { id: 'rules', hint: 'Your own spending rules (text, PDF or a photo of a note)', accept: '.txt,.pdf,.docx,.jpg,.jpeg,.png,.webp' },
+  { id: 'bank', hint: 'Statement with your balance and upcoming bills', accept: '.pdf,.jpg,.jpeg,.png,.webp,.csv,.xlsx' },
+  { id: 'paystub', hint: 'Your latest pay stub (rate, next pay date)', accept: '.pdf,.jpg,.jpeg,.png,.webp' },
+  { id: 'receipts', hint: 'Receipts for things you own. Each one you add is kept, so the list grows.', accept: '.pdf,.eml,.jpg,.jpeg,.png,.webp,.txt', multiple: true },
 ]
+
+interface Profile { goal_name?: string; goal_target?: number | string; goal_saved?: number | string; goal_monthly?: number | string; goal_date?: string; rules?: string[] | string }
 
 const CSS = `
 .dcp-btn { align-self: center; font: 500 0.78rem/1 var(--sans); padding: 7px 12px; border-radius: 999px;
@@ -47,6 +47,16 @@ const CSS = `
 .dcp-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--s3, 18px); font-size: 0.8rem; color: var(--ink-2); }
 .dcp-reset { background: none; border: 1px solid var(--hair-2); border-radius: 6px; padding: 6px 10px; font: inherit; color: var(--ink-2); cursor: pointer; }
 .dcp-busy { font-size: 0.85rem; }
+.dcp-q { display: grid; gap: 10px; padding: 12px 0 4px; border-top: 1px solid var(--hair-2); }
+.dcp-q h3 { margin: 0; font: 600 0.95rem/1.2 var(--sans); }
+.dcp-q .dcp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.dcp-q label { display: grid; gap: 4px; font-size: 0.8rem; color: var(--ink-2); }
+.dcp-q input, .dcp-q textarea { font: 0.9rem/1.3 var(--sans); padding: 7px 9px; border: 1px solid var(--hair-2); border-radius: 6px; background: #fff; color: var(--ink); }
+.dcp-q textarea { min-height: 64px; resize: vertical; }
+.dcp-q .dcp-sug { font-size: 0.75rem; color: var(--buy); }
+.dcp-save { justify-self: start; font: 500 0.82rem/1 var(--sans); padding: 8px 14px; border-radius: 6px; border: 1px solid var(--ink); background: var(--ink); color: var(--ivory, #f4efe4); cursor: pointer; }
+.dcp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dcp-chip { font: 0.75rem/1 var(--sans); padding: 5px 8px; border-radius: 999px; border: 1px dashed var(--hair-2); background: none; color: var(--ink-2); cursor: pointer; }
 `
 
 export default function DocsPanel({ onChange, openSignal = 0 }: Props) {
@@ -55,6 +65,9 @@ export default function DocsPanel({ onChange, openSignal = 0 }: Props) {
   const [sum, setSum] = useState<Summary | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [q, setQ] = useState<Profile>({})
+  const [sugMonthly, setSugMonthly] = useState<number | null>(null)
+  const [saved, setSaved] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -67,7 +80,33 @@ export default function DocsPanel({ onChange, openSignal = 0 }: Props) {
     }
   }, [])
 
-  useEffect(() => { if (open) load() }, [open, load])
+  const loadProfile = useCallback(async () => {
+    try {
+      const r = await fetch('/api/profile')
+      if (!r.ok) return
+      const j = await r.json()
+      const p: Profile = j.profile ?? {}
+      setQ({ ...p, rules: Array.isArray(p.rules) ? p.rules.join('\n') : (p.rules ?? '') })
+      setSugMonthly(j.suggested?.goal_monthly ?? null)
+    } catch { /* offline */ }
+  }, [])
+
+  useEffect(() => { if (open) { load(); loadProfile() } }, [open, load, loadProfile])
+
+  const saveAnswers = useCallback(async () => {
+    setBusy('Saving your answers…'); setErr(null); setSaved(false)
+    try {
+      const body = { ...q, goal_monthly: q.goal_monthly === '' || q.goal_monthly == null ? sugMonthly ?? '' : q.goal_monthly }
+      const r = await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      setSum(await r.json()); setSaved(true); onChange()
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(null) }
+  }, [q, sugMonthly, onChange])
+
+  const clearReceipts = useCallback(async () => {
+    setBusy('Removing receipts…')
+    try { const r = await fetch('/api/docs?slot=receipts', { method: 'DELETE' }); if (r.ok) { setSum(await r.json()); onChange() } } finally { setBusy(null) }
+  }, [onChange])
 
   const upload = useCallback(async (slot: string, files: FileList | null) => {
     if (!files || !files.length) return
@@ -75,17 +114,18 @@ export default function DocsPanel({ onChange, openSignal = 0 }: Props) {
     setErr(null)
     try {
       const fd = new FormData()
-      Array.from(files).slice(0, 5).forEach((f) => fd.append('files', f))
+      Array.from(files).slice(0, 10).forEach((f) => fd.append('files', f))
       const r = await fetch(`/api/docs/${slot}`, { method: 'POST', body: fd })
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? `HTTP ${r.status}`)
       setSum(await r.json())
       onChange()
+      if (slot === 'bank') loadProfile()   // the statement may reveal your monthly saving
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(null)
     }
-  }, [onChange])
+  }, [onChange, loadProfile])
 
   const reset = useCallback(async () => {
     setBusy('Removing your documents…')
@@ -112,7 +152,7 @@ export default function DocsPanel({ onChange, openSignal = 0 }: Props) {
               <span className="dcp-title">Your documents</span>
               <button type="button" className="dcp-x" aria-label="Close" onClick={() => setOpen(false)}>×</button>
             </div>
-            <p className="dcp-sub">Upload any of these. NDI reads each one, and your four selves vote on <b>your</b> numbers only: anything you skip is treated as unknown, never filled in from the demo persona. Files stay on this laptop.</p>
+            <p className="dcp-sub">Upload your <b>bank statement</b> and <b>pay stub</b>, add <b>receipts</b> for things you own, then answer a few quick questions. NDI reads every document, and your four selves vote on <b>your</b> numbers only. Files stay on this laptop.</p>
             {busy && <p className="dcp-busy">⏳ {busy}</p>}
             {err && <p className="dcp-err">{err}</p>}
             {sum && ORDER.map(({ id, hint, accept, multiple }) => {
@@ -126,15 +166,38 @@ export default function DocsPanel({ onChange, openSignal = 0 }: Props) {
                     <div className="dcp-hint">{hint}</div>
                   </div>
                   <label className="dcp-up">
-                    {s.owner === 'yours' ? 'Replace' : 'Upload'}
+                    {id === 'receipts' ? (s.owner === 'yours' ? '+ Add more' : 'Add receipts') : s.owner === 'yours' ? 'Replace' : 'Upload'}
                     <input type="file" accept={accept} multiple={!!multiple} disabled={!!busy}
                       onChange={(e) => { upload(id, e.target.files); e.target.value = '' }} />
                   </label>
-                  <div className="dcp-files">{s.files.join(' · ') || '—'}</div>
+                  <div className="dcp-files">{s.files.join(' · ') || '—'}
+                    {id === 'receipts' && s.owner === 'yours' && <> · <button type="button" className="dcp-chip" onClick={clearReceipts} disabled={!!busy}>clear receipts</button></>}
+                  </div>
                   {s.errors.map((x) => <div className="dcp-err" key={x}>{x}</div>)}
                 </div>
               )
             })}
+            {sum && (
+              <div className="dcp-q">
+                <h3>A few quick questions</h3>
+                <div className="dcp-grid">
+                  <label>What are you saving for?<input value={String(q.goal_name ?? '')} placeholder="e.g. Japan trip, emergency fund" onChange={(e) => setQ({ ...q, goal_name: e.target.value })} /></label>
+                  <label>By when?<input value={String(q.goal_date ?? '')} placeholder="e.g. April 2027" onChange={(e) => setQ({ ...q, goal_date: e.target.value })} /></label>
+                  <label>Target amount ($)<input inputMode="decimal" value={String(q.goal_target ?? '')} placeholder="4000" onChange={(e) => setQ({ ...q, goal_target: e.target.value })} /></label>
+                  <label>Saved so far ($)<input inputMode="decimal" value={String(q.goal_saved ?? '')} placeholder="0" onChange={(e) => setQ({ ...q, goal_saved: e.target.value })} /></label>
+                  <label>Saving per month ($)<input inputMode="decimal" value={String(q.goal_monthly ?? '')} placeholder={sugMonthly != null ? String(sugMonthly) : '200'} onChange={(e) => setQ({ ...q, goal_monthly: e.target.value })} />
+                    {sugMonthly != null && <span className="dcp-sug">From your bank statement: about ${sugMonthly.toLocaleString()} in savings transfers</span>}</label>
+                </div>
+                <label>Any spending rules you want held to? (one per line, optional)
+                  <textarea value={String(q.rules ?? '')} placeholder={'e.g. No gadgets over $200 until my trip\nMax two takeout orders a week'} onChange={(e) => setQ({ ...q, rules: e.target.value })} /></label>
+                <div className="dcp-chips">
+                  {['No gadgets over $200 until my goal', 'No clothing over $100 this month', 'Max two takeout orders a week'].map((c) => (
+                    <button type="button" key={c} className="dcp-chip" onClick={() => setQ({ ...q, rules: [String(q.rules ?? '').trim(), c].filter(Boolean).join('\n') })}>+ {c}</button>
+                  ))}
+                </div>
+                <button type="button" className="dcp-save" onClick={saveAnswers} disabled={!!busy}>{saved ? 'Saved ✓' : 'Save answers'}</button>
+              </div>
+            )}
             {sum && sum.flags.length > 0 && (
               <ul className="dcp-flags">{sum.flags.map((f) => <li key={f}>⚠ {f}</li>)}</ul>
             )}
