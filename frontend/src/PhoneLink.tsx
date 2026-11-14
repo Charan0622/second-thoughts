@@ -16,7 +16,7 @@ interface Latest { id: number; frame: string | null; price?: number | null; ts?:
 const KEEP_POLLING_MS = 10 * 60 * 1000
 
 const CSS = `
-.phl-btn { align-self: center; font: 500 0.78rem/1 var(--sans); padding: 7px 12px; border-radius: 999px;
+.phl-btn { align-self: center; justify-self: start; width: auto; flex: 0 0 auto; font: 500 0.78rem/1 var(--sans); padding: 7px 12px; border-radius: 999px;
   border: 1px solid var(--hair-2); background: transparent; color: var(--ink-2); white-space: nowrap; }
 .phl-btn:hover { border-color: var(--ink); color: var(--ink); }
 .phl-btn.is-live { border-color: var(--buy); color: var(--buy); }
