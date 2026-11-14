@@ -293,8 +293,21 @@ export default function App() {
           <PersonaLine persona={persona} mode={mode} />
           <PriceConfirm ev={confirmEv} onCancel={() => setConfirmEv(null)}
             onConfirm={(price, name) => { setConfirmEv(null); const r = lastReqRef.current; if (r) void run({ ...r, price, item_name: name }) }} />
+          <nav className="hdr-actions" aria-label="Actions">
+          <button type="button" className="dcp-btn" onClick={() => {
+            if (needsChoice) { toast('Choose your documents or the demo persona first'); return }
+            abortRef.current?.abort(); dispatch({ kind: 'clear' }); setClarity(false)
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+            setTimeout(() => (document.querySelector('input[type=file][accept="image/*"]') as HTMLInputElement | null)?.click(), 50)
+          }}>📷 Check something</button>
+          <button type="button" className="dcp-btn" onClick={() => {
+            abortRef.current?.abort(); dispatch({ kind: 'clear' }); setClarity(false); setConfirmEv(null)
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+          }}>↺ Start over</button>
+
           <DocsPanel openSignal={docsOpen} onChange={refreshPersona} />
           <PhoneLink ready={!needsChoice} runId={state.runId} onFrame={(frame, price) => run({ demo_item: null, frame, price: price ?? parsedPrice, item_name: null })} />
+          </nav>
           <span className={`source ${mock ? 'source-mock' : 'source-live'}`} title={mock ? 'Backend not reachable: replaying recorded fixture events' : 'Connected to the live backend'}>
             {mock ? 'Mock fixtures' : 'Live'}
           </span>
@@ -322,7 +335,7 @@ export default function App() {
             busy={busy}
             resolved={!!state.verdict}
           />}
-          <Debate key={state.runId} lines={state.debate ?? []} docked={!clarity} />
+          <Debate key={state.runId} lines={state.debate ?? []} done={!!state.verdict} />
           {state.negotiation && !state.verdict && (
             <motion.p className="act-note" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
               Negotiating · {state.negotiation.chosen.label}

@@ -45,3 +45,19 @@
   .debate.is-docked .debate-lines { max-height: min(13rem, 26vh); }
   .debate-text { font-size: 1.05rem; }
 }
+
+/* Drawer: pinned to the right edge below the header so it never covers the item or the controls. */
+.debate.is-drawer { position: fixed; right: 16px; top: 112px; width: min(380px, calc(100vw - 32px)); max-height: min(60vh, 520px);
+  z-index: 25; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,.18); margin: 0; }
+.debate.is-drawer .debate-lines { max-height: none; overflow-y: auto; flex: 1; }
+.debate-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.debate-close { background: none; border: 0; font-size: 1rem; line-height: 1; padding: 4px 6px; cursor: pointer; color: inherit; opacity: .7; }
+.debate-close:hover { opacity: 1; }
+.debate-pill { position: fixed; right: 16px; bottom: 16px; z-index: 25; font: 500 .85rem/1 var(--sans); padding: 10px 14px;
+  border-radius: 999px; border: 1px solid var(--hair-2); background: var(--ivory, #f4efe4); color: var(--ink); cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+@media (max-width: 760px) { .debate.is-drawer { top: auto; bottom: 12px; max-height: 45vh; } }
+
+.hdr-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.hdr-actions > .dcp-btn, .hdr-actions .phl-btn { width: auto; flex: 0 0 auto; }
+.debate.is-drawer .debate-line { grid-template-columns: 1fr !important; gap: 2px; }
