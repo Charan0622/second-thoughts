@@ -1,0 +1,17 @@
+From: Apple Store <orders@applestore.example>
+To: Jordan Lee <jordan@example.com>
+Subject: Your Apple Store receipt
+Date: Wed, 22 Apr 2026 18:05:00 -0800
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+MIME-Version: 1.0
+
+Hi Jordan,
+
+Thanks for your purchase on April 22, 2026.
+
+  1 × AirPods (4th generation)    $129.00
+  Total charged: $129.00
+
+Returns accepted within 14 days of purchase.
+(This is a fictional receipt generated for testing.)

@@ -321,8 +321,9 @@ async def _agent_offer_scan(agent: str, v: Vote, offers: list[tradeoffs.Offer]) 
 async def negotiate(item: Item, votes: dict[str, Vote], weights: dict[str, float], say=None) -> dict:
     """`say` (optional callback) receives one first-person "say" event per self as soon as its scan lands."""
     t = time.perf_counter()
-    dup = votes["owned"].extra.get("p_duplicate", 0) >= 0.5 if "owned" in votes else None
-    offs = tradeoffs.offers(item, owns_similar=dup)
+    ov = votes["owned"].extra if "owned" in votes else {}
+    dup = ov.get("p_duplicate", 0) >= 0.5 if "owned" in votes else None
+    offs = tradeoffs.offers(item, owns_similar=dup, dup_item=ov.get("dup_item"), dup_price=ov.get("dup_price"))
     scans = []
     for fut in asyncio.as_completed([_agent_offer_scan(a, v, offs) for a, v in votes.items()]):
         try:

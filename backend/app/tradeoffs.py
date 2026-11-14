@@ -19,15 +19,17 @@ class Offer:
         return {"id": self.id, "label": self.label, "amount": self.amount}
 
 
-def offers(item: Item, owns_similar: bool | None = None) -> list[Offer]:
+def offers(item: Item, owns_similar: bool | None = None, dup_item: str | None = None,
+           dup_price: float | None = None) -> list[Offer]:
     from .agents import goals
     p = F.persona
     n, g = p.first_name, p.goal_short
     avg = p.avg_delivery
     two, four = round(2 * avg, 2), round(4 * avg, 2)
     hours = round(item.price / p.hourly, 1) if p.hourly else 0.0  # no pay stub (mode "mine") → offer dropped below
-    owned_name = (p.owned_item or "similar item").split("(")[0].strip()
-    resale = round(p.owned_price * 0.5)
+    owned_name = (dup_item or p.owned_item or "similar item").split("(")[0].strip()
+    owned_price = float(dup_price or p.owned_price or 0)
+    resale = round(owned_price * 0.5)
     br = goals.broken_rule(item)
     over_rule = round(max(0.0, item.price - br["limit"]), 2) if br else 0.0
     out = [
@@ -38,11 +40,11 @@ def offers(item: Item, owns_similar: bool | None = None) -> list[Offer]:
         Offer("skip_takeout_4", f"Skip four takeout orders (${four:,.0f})", four,
               f"{n} commits to skipping four food-delivery orders this month, saving ${four:,.2f}."),
         Offer("resell_earbuds", f"Resell the {owned_name} (≈ +${resale})", float(resale),
-              f"{n} commits to reselling their ${p.owned_price:.0f} {owned_name} for about ${resale}, so they won't own two similar things."),
+              f"{n} commits to reselling their ${owned_price:.0f} {owned_name} for about ${resale}, so they won't own two similar things."),
         Offer("top_up_japan", f"Top up {g} fund by ${over_rule:,.0f}", over_rule,
               f"{n} commits to adding ${over_rule:,.2f} (the amount over their own limit) to the {g} fund on payday, so the goal does not slip."),
         Offer("resell_and_topup", f"Resell the {owned_name} (≈ +${resale}) AND put ${over_rule:,.0f} into the {g} fund", over_rule + resale,
-              f"{n} commits to reselling their ${p.owned_price:.0f} {owned_name} (about ${resale}) so they own one, AND adding ${over_rule:,.2f} "
+              f"{n} commits to reselling their ${owned_price:.0f} {owned_name} (about ${resale}) so they own one, AND adding ${over_rule:,.2f} "
               f"(the amount over their own limit) to the {g} fund on payday so the goal does not slip."),
         Offer("extra_hours", f"Work {hours} extra hours", round(item.price, 2),
               f"{n} commits to {hours} extra paid hours (${item.price:,.2f} at ${p.hourly:.0f}/hr) to cover this purchase."),

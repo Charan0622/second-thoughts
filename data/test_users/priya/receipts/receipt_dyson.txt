@@ -1,0 +1,5 @@
+Dyson Demo Store receipt
+Date: 2026-05-18
+Customer: Priya Nair
+Item: Dyson V8 cordless vacuum
+Total: $349.99

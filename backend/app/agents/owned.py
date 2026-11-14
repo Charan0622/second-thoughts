@@ -29,7 +29,14 @@ async def vote(item: Item, extra: str | None = None) -> Vote:
                                         "No owned item serves the same main purpose")})
     cit, cp = pick_citation(answers, fs)
     dup = answers["duplicate"]["noul"]
-    headline = (f"You already own: {p.owned_item.split('(')[0].strip()} (${p.owned_price:.0f})" if dup >= 0.5 and p.owned_item
+    # which owned item did Drex point at? (decisive_fact → "Already own: <item>, bought …")
+    fid = (answers.get("decisive_fact") or {}).get("choice")
+    hit = next((o for i, o in enumerate(p.owned) if f"owned_{i}" == fid), None)
+    if hit is None and fid == "owned_item" and p.owned_item:
+        hit = {"item": p.owned_item, "price": p.owned_price}
+    dup_item = (hit or {}).get("item") or p.owned_item
+    dup_price = (hit or {}).get("price") or p.owned_price
+    headline = (f"You already own: {dup_item.split('(')[0].strip()} (${dup_price:.0f})" if dup >= 0.5 and dup_item
                 else "Nothing like this in your receipts")
     return Vote("owned", LABEL, answers["regret"]["noul"], answers["stake"]["score"], headline, cit, cp,
-                res["model"], res["ms"], extra={"p_duplicate": dup}, state=state)
+                res["model"], res["ms"], extra={"p_duplicate": dup, "dup_item": dup_item, "dup_price": dup_price}, state=state)

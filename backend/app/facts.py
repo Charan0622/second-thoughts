@@ -121,7 +121,7 @@ class Persona:
     @property
     def goal_short(self) -> str:
         g = (self.goal_name or "savings goal").split("(")[0].strip()
-        for suffix in (" trip", " fund", " goal"):
+        for suffix in (" trip",):
             if g.lower().endswith(suffix):
                 g = g[: -len(suffix)]
         return g.strip() or "savings goal"
@@ -228,8 +228,13 @@ def suggested_monthly_saving() -> float | None:
     if not B or _slot_owner.get("bank") != "yours":
         return None
     d = _results.get(B, {}).get("data") or {}
-    tr = [_num(t.get("amount"), 0) for t in (d.get("savings_transfers") or []) if _num(t.get("amount"), 0) > 0]
-    tr += [_num(s.get("amount"), 0) for s in (d.get("scheduled_payments") or []) if "saving" in str(s.get("payee", "")).lower()]
+    seen, tr = set(), []
+    rows = [(str(t.get("date", ""))[:10], _num(t.get("amount"), 0)) for t in (d.get("savings_transfers") or [])]
+    rows += [(str(s.get("date", ""))[:10], _num(s.get("amount"), 0)) for s in (d.get("scheduled_payments") or [])
+             if "saving" in str(s.get("payee", "")).lower()]
+    for dt, amt in rows:   # the same transfer can appear as a transaction and as a scheduled payment
+        if amt > 0 and (dt, amt) not in seen:
+            seen.add((dt, amt)); tr.append(amt)
     return round(sum(tr), 2) if tr else None
 
 

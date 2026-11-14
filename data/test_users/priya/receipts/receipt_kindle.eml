@@ -1,0 +1,17 @@
+From: Amazon <orders@amazon.example>
+To: Priya Nair <priya@example.com>
+Subject: Your Amazon receipt
+Date: Tue, 10 Feb 2026 09:41:00 -0800
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+MIME-Version: 1.0
+
+Hi Priya,
+
+Thanks for your purchase on February 10, 2026.
+
+  1 × Kindle Paperwhite (16 GB)    $159.99
+  Total charged: $159.99
+
+Returns accepted within 14 days of purchase.
+(This is a fictional receipt generated for testing.)
