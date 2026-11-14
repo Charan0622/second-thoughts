@@ -10,6 +10,7 @@ dependencies = [
     "nace-sdk>=0.8.0",
     "pillow>=13.0.0",
     "pydantic>=2.14.3",
+    "pypdfium2>=5.15.2",
     "python-dotenv>=1.2.4",
     "python-multipart>=0.0.33",
     "uvicorn[standard]>=0.54.0",

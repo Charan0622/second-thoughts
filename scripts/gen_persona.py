@@ -245,7 +245,7 @@ if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
     FRAMES.mkdir(parents=True, exist_ok=True)
     bank_statement(); pay_stub(); savings_tracker(); receipt_email(); paper_receipt()
-    price_tag("shoes", "TrailFlow 5 Running Shoes", "$160.00")
+    price_tag("shoes", "ASICS Gel-Nimbus 27 Running Shoes", "$109.95")
     price_tag("headphones", "Sony WH-1000XM6 Headphones", "$349.00")
     price_tag("macmini", "Apple Mac mini (M5, 16GB)", "$599.00")
     print(f"free cash before payday = ${FREE_CASH:.2f}")
