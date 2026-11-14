@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import {
   fetchDemoItems, fetchHealth, fetchPersona, streamVerdict,
   type AgentId, type DemoItem, type DemoItemId, type NegotiationEvent, type PerceiveEvent, type Persona,
@@ -8,8 +8,7 @@ import {
 } from './api'
 import { MOCK_DEMO_ITEMS, MOCK_PERSONA, mockVerdict } from './mock'
 import Camera from './Camera'
-import Council from './Council'
-import Gauge from './Gauge'
+import Council, { Evidence } from './Council'
 import Verdict from './Verdict'
 import Ledger from './Ledger'
 
@@ -25,15 +24,17 @@ export interface RunState {
   negotiation?: NegotiationEvent
   verdict?: VerdictEvent
   sentence?: SentenceEvent
+  error?: string
 }
 
-type Action = { kind: 'reset' } | { kind: 'event'; ev: VerdictStreamEvent } | { kind: 'fail' }
+type Action = { kind: 'reset' } | { kind: 'clear' } | { kind: 'event'; ev: VerdictStreamEvent } | { kind: 'fail'; message?: string }
 
 const initial: RunState = { runId: 0, phase: 'idle', votes: {} }
 
 function reducer(s: RunState, a: Action): RunState {
   if (a.kind === 'reset') return { runId: s.runId + 1, phase: 'perceiving', votes: {} }
-  if (a.kind === 'fail') return { ...s, phase: s.verdict ? 'done' : 'error' }
+  if (a.kind === 'clear') return { runId: s.runId + 1, phase: 'idle', votes: {} }
+  if (a.kind === 'fail') return { ...s, phase: s.verdict ? 'done' : 'error', error: a.message ?? s.error }
   const ev = a.ev
   switch (ev.type) {
     case 'perceive_start': return { ...s, phase: 'perceiving' }
@@ -46,7 +47,7 @@ function reducer(s: RunState, a: Action): RunState {
     case 'verdict': return { ...s, verdict: ev, phase: 'done' }
     case 'sentence': return { ...s, sentence: ev }
     case 'done': return s.phase === 'done' ? s : { ...s, phase: 'done' }
-    case 'error': return { ...s, phase: s.verdict ? 'done' : 'error' }
+    case 'error': return { ...s, phase: s.verdict ? 'done' : 'error', error: ev.message }
     case 'agent_error': return s
     default: return s
   }
@@ -55,6 +56,7 @@ function reducer(s: RunState, a: Action): RunState {
 interface Toast { id: number; text: string }
 
 const forceMock = new URLSearchParams(window.location.search).has('mock')
+const DEMO_IDS: DemoItemId[] = ['shoes', 'headphones', 'macmini']
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initial)
@@ -62,12 +64,14 @@ export default function App() {
   const [items, setItems] = useState<DemoItem[]>(MOCK_DEMO_ITEMS)
   const [persona, setPersona] = useState<Persona | null>(null)
   const [demoMode, setDemoMode] = useState(true)
-  const [selected, setSelected] = useState<DemoItemId>('shoes')
+  const [selected, setSelected] = useState<DemoItemId>('headphones')
   const [manualPrice, setManualPrice] = useState('')
   const [muted, setMuted] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [ready, setReady] = useState(false)
+  const [inspect, setInspect] = useState<AgentId | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const captureRef = useRef<(() => void) | null>(null)
   const mutedRef = useRef(muted)
   mutedRef.current = muted
 
@@ -108,6 +112,7 @@ export default function App() {
     const ctl = new AbortController()
     abortRef.current = ctl
     if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+    setInspect(null)
     dispatch({ kind: 'reset' })
     try {
       const stream = mock ? mockVerdict(req, ctl.signal) : streamVerdict(req, ctl.signal)
@@ -119,8 +124,9 @@ export default function App() {
       }
     } catch (e) {
       if (ctl.signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) return
-      dispatch({ kind: 'fail' })
-      toast(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      dispatch({ kind: 'fail', message })
+      toast(message)
     }
   }, [mock, speak, toast])
 
@@ -138,30 +144,46 @@ export default function App() {
     run({ demo_item: null, frame, price: parsedPrice, item_name: null })
   }, [run, parsedPrice])
 
-  // Keyboard: 1/2/3 pick a demo item.
+  const busy = state.phase === 'perceiving' || state.phase === 'council' || state.phase === 'pooled'
+
+  const ask = useCallback(() => {
+    if (busy) return
+    if (demoMode) runDemo(selected)
+    else captureRef.current?.()
+  }, [busy, demoMode, runDemo, selected])
+
+  // Picking a different item returns to the quiet "desire" state until asked.
+  const choose = useCallback((id: DemoItemId) => {
+    if (id === selected && state.phase === 'idle') return
+    abortRef.current?.abort()
+    setSelected(id)
+    setInspect(null)
+    dispatch({ kind: 'clear' })
+  }, [selected, state.phase])
+
+  // Keyboard: 1/2/3 run a demo item, ←/→ cycle, Enter asks, Esc closes evidence.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.metaKey || e.ctrlKey) return
-      const ids: DemoItemId[] = ['shoes', 'headphones', 'macmini']
+      if (e.key === 'Escape') { setInspect(null); return }
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || e.metaKey || e.ctrlKey) return
       const idx = ['1', '2', '3'].indexOf(e.key)
-      if (idx >= 0 && demoMode) { e.preventDefault(); runDemo(ids[idx]) }
-      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-        if (!demoMode) return
-        const cur = ids.indexOf(selected)
-        const next = ids[(cur + (e.key === 'ArrowRight' ? 1 : 2)) % 3]
-        runDemo(next)
+      if (idx >= 0 && demoMode) { e.preventDefault(); runDemo(DEMO_IDS[idx]) }
+      if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && demoMode) {
+        const cur = DEMO_IDS.indexOf(selected)
+        runDemo(DEMO_IDS[(cur + (e.key === 'ArrowRight' ? 1 : 2)) % 3])
       }
+      if (e.key === 'Enter') { e.preventDefault(); ask() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [demoMode, runDemo, selected])
+  }, [demoMode, runDemo, selected, ask])
 
   // ?run=shoes|headphones|macmini auto-starts a demo once live/mock is decided.
   const autoRan = useRef(false)
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('run') as DemoItemId | null
-    if (!ready || autoRan.current || !id || !['shoes', 'headphones', 'macmini'].includes(id)) return
+    if (!ready || autoRan.current || !id || !DEMO_IDS.includes(id)) return
     autoRan.current = true
     runDemo(id)
   }, [ready, runDemo])
@@ -170,75 +192,88 @@ export default function App() {
     if (muted && 'speechSynthesis' in window) window.speechSynthesis.cancel()
   }, [muted])
 
-  const busy = state.phase === 'perceiving' || state.phase === 'council' || state.phase === 'pooled'
+  const stage = state.verdict ? 'resolved'
+    : state.negotiation ? 'negotiating'
+    : Object.keys(state.votes).length ? 'disagreeing'
+    : state.phase === 'idle' || (state.phase === 'error' && !state.perceive) ? 'desire'
+    : 'awakening'
 
   return (
-    <div className="stage">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden>◐</span>
-          <span className="brand-name">Second Thoughts</span>
-          {mock && <span className="badge badge-mock" title="Backend not reachable — simulated events">MOCK</span>}
-        </div>
-        <PersonaStrip persona={persona} />
-      </header>
+    <MotionConfig reducedMotion="user">
+      <div className={`app stage-${stage}`} data-band={state.verdict?.band ?? ''}>
+        <header className="mast">
+          <div className="brand">
+            <span className="brand-mark" aria-hidden><i /><i /></span>
+            <span className="brand-name">Second Thoughts</span>
+            <span className="brand-tag">Your future selves weigh in before you pay.</span>
+          </div>
+          <PersonaLine persona={persona} />
+          <span className={`source ${mock ? 'source-mock' : 'source-live'}`} title={mock ? 'Backend not reachable: replaying recorded fixture events' : 'Connected to the live backend'}>
+            {mock ? 'Mock fixtures' : 'Live'}
+          </span>
+        </header>
 
-      <main className="main">
-        <section className="left">
+        <main className="chamber">
+          <Council state={state} side="left" agents={['budget', 'goals']} onInspect={setInspect} inspecting={inspect} />
           <Camera
             demoMode={demoMode}
             setDemoMode={setDemoMode}
             items={items}
             selected={selected}
-            onPickDemo={runDemo}
+            onSelect={choose}
+            onAsk={ask}
             onCapture={runFrame}
+            captureRef={captureRef}
             manualPrice={manualPrice}
             setManualPrice={setManualPrice}
             phase={state.phase}
             perceive={state.perceive}
             busy={busy}
+            resolved={!!state.verdict}
           />
-          <Ledger mock={mock} />
-        </section>
+          <Council state={state} side="right" agents={['owned', 'deal']} onInspect={setInspect} inspecting={inspect} />
+        </main>
 
-        <section className="right">
-          <Council state={state} />
-          <Gauge state={state} />
-          <Verdict state={state} muted={muted} setMuted={setMuted} mock={mock} />
-        </section>
-      </main>
+        <Verdict state={state} muted={muted} setMuted={setMuted} mock={mock} onInspect={setInspect} />
 
-      <div className="toasts" role="status" aria-live="polite">
+        <Ledger mock={mock} />
+
         <AnimatePresence>
-          {toasts.map((t) => (
-            <motion.div key={t.id} className="toast" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>
-              <strong>Error</strong> {t.text}
-            </motion.div>
-          ))}
+          {inspect && state.votes[inspect] && (
+            <Evidence key={inspect} agent={inspect} state={state} mock={mock} onClose={() => setInspect(null)} />
+          )}
         </AnimatePresence>
+
+        <div className="toasts" role="status" aria-live="polite">
+          <AnimatePresence>
+            {toasts.map((t) => (
+              <motion.div key={t.id} className="toast" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}>
+                <strong>Error</strong> {t.text}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
       </div>
-    </div>
+    </MotionConfig>
   )
 }
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 
-function PersonaStrip({ persona }: { persona: Persona | null }) {
+function PersonaLine({ persona }: { persona: Persona | null }) {
   if (!persona) return <div className="persona persona-loading">Loading persona…</div>
   const pct = Math.min(1, persona.japan.saved / persona.japan.target)
   const payday = new Date(persona.next_payday + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   return (
-    <div className="persona">
-      <span className="persona-name">{persona.name}</span>
-      <span className="persona-sep" aria-hidden>·</span>
-      <span className="persona-item"><span className="muted">free cash before payday</span> <b>{usd(persona.free_cash)}</b></span>
-      <span className="persona-sep" aria-hidden>·</span>
-      <span className="persona-item"><span className="muted">payday</span> <b>{payday}</b></span>
-      <span className="persona-sep" aria-hidden>·</span>
-      <span className="persona-item persona-japan">
-        <span className="muted">Japan fund</span> <b>{usd(persona.japan.saved)}</b><span className="muted"> / {usd(persona.japan.target)}</span>
-        <span className="meter" aria-hidden><span className="meter-fill" style={{ width: `${pct * 100}%` }} /></span>
-      </span>
-    </div>
+    <dl className="persona" aria-label={`${persona.name}'s situation`}>
+      <div className="persona-who"><dt className="sr">Person</dt><dd>{persona.name}</dd></div>
+      <div><dt>Free before payday</dt><dd>{usd(persona.free_cash)}</dd></div>
+      <div><dt>Payday</dt><dd>{payday}</dd></div>
+      <div className="persona-japan">
+        <dt>Japan fund</dt>
+        <dd>{usd(persona.japan.saved)}<span> / {usd(persona.japan.target)}</span></dd>
+        <span className="meter" aria-hidden><span style={{ width: `${pct * 100}%` }} /></span>
+      </div>
+    </dl>
   )
 }
