@@ -30,6 +30,19 @@ export function positionOf(state: RunState, a: AgentId): Position {
   return { first, now, moved: !!(first && after && first !== after), pick }
 }
 
+/** The Convergence Ring: how far apart the council is, from real numbers only.
+ *  Votes so far → their average regret; pool → pooled regret; negotiation → the chosen offer's regret; veto → the veto's p. */
+function convergence(state: RunState): { value: number; from?: number; label: string; zone: 'buy' | 'cond' | 'wait' } | null {
+  const zone = (p: number) => (p < 0.35 ? 'buy' : p <= 0.65 ? 'cond' : 'wait') as 'buy' | 'cond' | 'wait'
+  if (state.veto?.fired) return { value: state.veto.p, from: state.pool?.p, label: 'Budget veto ·', zone: 'wait' }
+  if (state.negotiation) return { value: state.negotiation.chosen.p_after, from: state.pool?.p, label: 'After the compromise ·', zone: zone(state.negotiation.chosen.p_after) }
+  if (state.pool) return { value: state.pool.p, label: 'Pooled', zone: zone(state.pool.p) }
+  const ps = AGENTS.map((a) => state.votes[a]).filter((v): v is VoteEvent => !!v && v.stance !== 'abstain').map((v) => v.p_regret)
+  if (!ps.length) return null
+  const avg = ps.reduce((x, y) => x + y, 0) / ps.length
+  return { value: avg, label: `Average of ${ps.length} vote${ps.length > 1 ? 's' : ''} ·`, zone: zone(avg) }
+}
+
 interface Props {
   state: RunState
   persona: Persona | null
@@ -39,8 +52,19 @@ interface Props {
 
 export default function Council({ state, persona, onInspect, inspecting }: Props) {
   const awake = state.phase !== 'idle' && !(state.phase === 'error' && !state.perceive)
+  const ring = convergence(state)
   return (
     <div className="council" aria-label="Your four selves">
+      {ring && (
+        <div className="ring-wrap" data-zone={ring.zone}>
+          <span className="ring" style={{ ['--k' as string]: (0.5 + ring.value * 0.5).toFixed(3) }} aria-hidden />
+          <p className="ring-label" aria-live="polite">
+            <span>{ring.label}</span> regret{' '}
+            {ring.from != null && <><b className="was">{ring.from.toFixed(2)}</b> → </>}
+            <b>{ring.value.toFixed(2)}</b>
+          </p>
+        </div>
+      )}
       {/* A line joins a self to the object only when that self says buy. */}
       <svg className="beams" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
         {AGENTS.map((a) => {
