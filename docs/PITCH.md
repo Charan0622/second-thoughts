@@ -1,6 +1,6 @@
 # Pitch kit
 
-## 5-slide outline (Adobe Express)
+## 5-slide outline
 
 **1 · The problem: "add to cart" is a one-person decision**
 - Impulse buys happen in seconds. The facts that should stop you are spread across a bank statement, a savings sheet, old receipts and rules you set for yourself.

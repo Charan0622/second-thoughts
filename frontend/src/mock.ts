@@ -25,7 +25,6 @@ const ledger: Ledger = {
     intern: { calls: 1, errors: 0, ms_median: 14000 },
     keenable: { calls: 3, errors: 0, ms_median: 1800 },
     deepinfra: { calls: 4, errors: 0, ms_median: 910 },
-    adobe: { calls: 0, note: 'Firefly avatars + Express slides (offline)' },
   },
   verdicts: 4,
   cost_usd_est: 0.009,
