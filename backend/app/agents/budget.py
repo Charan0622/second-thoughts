@@ -26,6 +26,11 @@ def computed(item: Item, extra: str | None = None) -> list[str]:
 
 async def vote(item: Item, extra: str | None = None) -> Vote:
     p = F.persona
+    if F._slot_owner.get("bank") == "missing":  # no bank statement uploaded: don't pretend the balance is $0
+        cit = {"doc": "bank", "doc_label": "Bank statement (not uploaded)", "page": None,
+               "quote": "Upload a bank statement so I can check your bills", "bbox": None, "crop_url": None}
+        return Vote("budget", LABEL, 0.5, 0.0, "No bank statement — can't check bills (not counted)", cit, 0.0, "—", 0.0,
+                    extra={"abstain": True, "p_unpayable": 0.0}, state="")
     fs = F.facts["budget"]
     state = build_state(LABEL, "protect scheduled bills and keep the buyer solvent until payday. You hold a veto.",
                         fs, computed(item, extra), item)

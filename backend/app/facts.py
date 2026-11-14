@@ -1,8 +1,13 @@
 """Fact store: NDI-extract every persona doc once, keep values + citations, cut citation crops.
 
-Documents live in SLOTS (bank, paystub, savings, receipts, rules). The demo persona's files are in data/persona/;
-a user's uploads (data/private/my_docs/<slot>/) override the demo slot by slot. If NDI can't find a field in a
-user's doc, the demo value is used and the fact is flagged. Snapshot persisted in data/private/facts.sqlite.
+Documents live in SLOTS (bank, paystub, savings, receipts, rules). Which documents are used depends on the persona
+MODE (data/private/mode.json):
+  "none" — nobody chosen yet: the demo docs are loaded internally (bench/tests), but /api/verdict refuses to run.
+  "demo" — the demo persona (Maya), exactly as before; user uploads are ignored.
+  "mine" — ONLY the user's uploads (data/private/my_docs/<slot>/). A slot without files is "missing": the self that
+           needs it still votes with what exists, neutral defaults (never Maya's numbers) fill required values, and
+           a flag says what is missing.
+Snapshot persisted in data/private/facts.sqlite.
 """
 
 from __future__ import annotations
@@ -41,6 +46,27 @@ class Fact:
                 "bbox": self.bbox, "crop_url": self.crop_url}
 
 
+# Mode "mine" without a savings goal: Goals You divides by the monthly contribution, so a huge sentinel keeps every
+# "goal slips N days" at 0 instead of crashing or inventing a goal. /api/persona reports it as 0.
+NO_GOAL_MONTHLY = 1e9
+MODES = ("none", "demo", "mine")
+MODE_FILE = PRIVATE / "mode.json"
+
+
+def get_mode() -> str:
+    try:
+        m = json.loads(MODE_FILE.read_text()).get("mode")
+        return m if m in MODES else "none"
+    except (OSError, ValueError, AttributeError):
+        return "none"
+
+
+def set_mode(mode: str) -> None:
+    if mode not in MODES:
+        raise ValueError(f"mode must be one of {MODES}")
+    MODE_FILE.write_text(json.dumps({"mode": mode}))
+
+
 @dataclass
 class Persona:
     name: str = "Maya Chen"
@@ -71,8 +97,9 @@ class Persona:
 
     @property
     def net_hourly(self) -> float:
-        """Take-home per hour (biweekly stub = 80 h)."""
-        return round(self.net_pay / 80, 2) if self.net_pay else self.hourly
+        """Take-home per hour (biweekly stub = 80 h). No pay data (mode "mine" without a pay stub) → inf, so
+        "hours of work" reads 0 instead of dividing by zero."""
+        return round(self.net_pay / 80, 2) if self.net_pay else (self.hourly or float("inf"))
 
     @property
     def days_to_payday(self) -> int:
@@ -88,7 +115,7 @@ class Persona:
 
     @property
     def first_name(self) -> str:
-        return (self.name or "You").split()[0]
+        return self.name.split()[0] if (self.name or "").strip() else "the buyer"  # mode "mine", no name found
 
     @property
     def goal_short(self) -> str:
@@ -103,7 +130,13 @@ class Persona:
         return round(self.balance - sum(s["amount"] for s in self.scheduled), 2)
 
     @property
+    def has_goal(self) -> bool:
+        return self.japan_monthly < NO_GOAL_MONTHLY
+
+    @property
     def rent(self) -> dict:
+        if not self.scheduled:  # mode "mine" with no bills found: a neutral placeholder, never Maya's rent
+            return {"date": self.next_payday, "payee": "your upcoming bills", "amount": 0.0}
         return max(self.scheduled, key=lambda s: s["amount"])
 
     @property
@@ -165,13 +198,19 @@ _slot_docs: dict[str, list[str]] = {}  # slot -> active doc keys
 _slot_owner: dict[str, str] = {}       # slot -> "yours" | "demo"
 
 
-def active_docs() -> dict[str, list[tuple[str, Path, str]]]:
-    """slot -> [(doc_key, path, owner)]: the user's files if the slot has any, else the demo files."""
+def my_files(slot: str) -> list[Path]:
+    d = MY_DOCS / slot
+    return sorted(p for p in d.glob("*") if p.is_file() and not p.name.startswith(".")) if d.exists() else []
+
+
+def active_docs(mode: str | None = None) -> dict[str, list[tuple[str, Path, str]]]:
+    """slot -> [(doc_key, path, owner)]. Mode "mine": only the user's files (a slot may be empty = missing).
+    Modes "demo"/"none": only the demo persona's files."""
+    mode = mode or get_mode()
     out: dict[str, list[tuple[str, Path, str]]] = {}
     for slot, demo in DEMO_DOCS.items():
-        mine = sorted(p for p in (MY_DOCS / slot).glob("*") if p.is_file()) if (MY_DOCS / slot).exists() else []
-        if mine:
-            out[slot] = [(f"my_{slot}_{p.name}", p, "yours") for p in mine]
+        if mode == "mine":
+            out[slot] = [(f"my_{slot}_{p.name}", p, "yours") for p in my_files(slot)]
         else:
             out[slot] = [(d, PERSONA / d, "demo") for d in demo if (PERSONA / d).exists()]
     return out
@@ -192,6 +231,7 @@ _errors: dict[str, str] = {}
 persona = Persona()
 facts: dict[str, list[Fact]] = {"budget": [], "goals": [], "owned": [], "deal": []}
 loaded = False
+mode = "none"   # mode the current facts were built for (set by load())
 
 
 # ---------------------------------------------------------------- crops
@@ -291,6 +331,8 @@ def _first(slot: str) -> str | None:
 
 
 def _build() -> None:
+    if mode == "mine":
+        return _build_mine()
     p = Persona()
     flags: list[str] = []
     B, PS, ST, RM = _first("bank"), _first("paystub"), _first("savings"), _first("rules")
@@ -368,6 +410,119 @@ def _build() -> None:
     _persist()
 
 
+def _rules_from(RM: str | None, flags: list[str]) -> list[str] | None:
+    rm = ((_results.get(RM, {}).get("data") or {}).get("rules")) if RM else None
+    if not rm and RM and RM in _errors and _paths.get(RM, Path("x")).suffix.lower() == ".txt":
+        # NDI unavailable: read a plain-text rules file locally (labelled as such) rather than drop the user's rules
+        txt = _paths[RM].read_text(errors="replace")
+        rm = [x.strip(' "“”') for x in re.split(r"(?<=[.!])\s+|\n", txt) if len(x.strip(' "“”')) > 8
+              and not x.lower().startswith(("alex rules", "rules memo", "voice memo"))][:6]
+        if rm:
+            flags.append("rules: NDI unavailable — read your text file locally")
+            _doc_labels[RM] = _doc_labels.get(RM, "Rules") + " (read locally)"
+    return rm
+
+
+def _iso_date(x: Any) -> str | None:
+    from datetime import datetime
+    s = str(x or "").strip()
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%B %d, %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(s[:10] if fmt == "%Y-%m-%d" else s, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
+def neutral_persona() -> Persona:
+    """Mode "mine" starting point: nothing borrowed from the demo persona."""
+    from datetime import date, timedelta
+    today = date.today()
+    return Persona(name="", balance=0.0, scheduled=[], next_payday=(today + timedelta(days=14)).isoformat(),
+                   hourly=0.0, net_pay=0.0, japan_target=0.0, japan_saved=0.0, japan_monthly=NO_GOAL_MONTHLY,
+                   japan_date="", delivery_count=0, delivery_total=0.0, owned_item="", owned_price=0.0, owned_date="",
+                   owned_return="", rules=[], rules_source="none", goal_name="savings goal", owned=[],
+                   today=today.strftime("%A, %B %-d, %Y"))
+
+
+def _build_mine() -> None:
+    """Mode "mine": only the user's documents. Missing slots → neutral defaults + a clear flag."""
+    p = neutral_persona()
+    flags: list[str] = []
+    B, PS, ST, RM = _first("bank"), _first("paystub"), _first("savings"), _first("rules")
+
+    def val(doc, path, what, slot):
+        v = _val(doc, path, None)
+        if v is None:
+            flags.append(f"{what}: not found in your {SLOT_LABELS[slot].lower()}")
+        return v
+
+    if not B:
+        flags.append("No bank statement uploaded — balance and bills unknown (treated as $0)")
+    else:
+        holder = _val(B, "/account_holder", None)
+        if holder:
+            p.name = str(holder).title()
+        p.balance = _num(val(B, "/available_balance", "balance", "bank"), 0.0)
+        bank = _results.get(B, {}).get("data") or {}
+        p.scheduled = [{"date": s.get("date"), "payee": s.get("payee"), "amount": _num(s.get("amount"), 0)}
+                       for s in (bank.get("scheduled_payments") or []) if _num(s.get("amount"), 0) > 0]
+        if not p.scheduled:
+            flags.append("scheduled bills: none found in your bank statement")
+        if bank.get("food_delivery"):
+            p.delivery_count = len(bank["food_delivery"])
+            p.delivery_total = round(sum(_num(t.get("amount"), 0) for t in bank["food_delivery"]), 2)
+    if not PS:
+        flags.append(f"No pay stub uploaded — payday unknown (assuming {p.next_payday}, 14 days from today)")
+    else:
+        p.hourly = _num(val(PS, "/hourly_rate", "hourly rate", "paystub"), 0.0)
+        p.net_pay = _num(val(PS, "/net_pay", "net pay", "paystub"), 0.0)
+        nd = _iso_date(val(PS, "/next_pay_date", "next payday", "paystub"))
+        if nd:
+            p.next_payday = nd
+        else:
+            flags.append(f"next payday: assuming {p.next_payday} (14 days from today)")
+    if not ST:
+        flags.append("No savings tracker uploaded — Goals You has no goal data")
+    else:
+        p.goal_name = str(_val(ST, "/goal", None) or "savings goal")
+        p.japan_target = _num(val(ST, "/target_amount", "goal target", "savings"), 0.0)
+        p.japan_saved = _num(val(ST, "/saved_so_far", "goal saved", "savings"), 0.0)
+        p.japan_monthly = _num(val(ST, "/monthly_contribution", "monthly saving", "savings"), 0.0) or NO_GOAL_MONTHLY
+        p.japan_date = str(_val(ST, "/target_date", None) or "no date set")
+    owned = []
+    for key in _slot_docs.get("receipts", []):
+        d = _results.get(key, {}).get("data") or {}
+        if d.get("item"):
+            owned.append({"key": key, "item": str(d["item"]), "price": _num(d.get("price"), 0.0),
+                          "date": str(d.get("purchase_date") or d.get("date") or ""),
+                          "return_policy": str(d.get("return_policy") or ""), "warranty": str(d.get("warranty") or "")})
+    p.owned = owned
+    if owned:
+        o = owned[0]
+        p.owned_item, p.owned_price, p.owned_date = o["item"], o["price"], o["date"]
+        p.owned_return = o["return_policy"] or "return policy not stated"
+    elif _slot_docs.get("receipts"):
+        flags.append("receipts: no purchased item found in your receipts")
+    else:
+        flags.append("No receipts uploaded — Already-Own-It You has nothing to compare against")
+    if not RM:
+        flags.append("No spending rules uploaded")
+    else:
+        rm = _rules_from(RM, flags)
+        if rm:
+            p.rules, p.rules_source = [str(r) for r in rm], "ndi"
+        elif not any(f.startswith("rules:") for f in flags):
+            flags.append("rules: none found in your rules document")
+    p.flags = flags
+    use_persona(p, crops=True)
+    _persist()
+
+
+def _missing(fid: str, agent: str, text: str, slot: str) -> Fact:
+    return Fact(id=fid, agent=agent, text=text, doc=slot, doc_label=f"{SLOT_LABELS[slot]} (not uploaded)", status="missing")
+
+
 def _slot_of(doc: str) -> str:
     for slot, ks in _slot_docs.items():
         if doc in ks:
@@ -385,23 +540,41 @@ def use_persona(p: Persona, crops: bool = False) -> None:
         BASE = p
     persona = p
     B, PS, ST, RM = _first("bank"), _first("paystub"), _first("savings"), _first("rules")
+    miss = {s for s in ("bank", "paystub", "savings", "rules") if _slot_owner.get(s) == "missing"}  # mode "mine" only
     B, PS, ST, RM = B or "bank_statement.pdf", PS or "pay_stub.jpg", ST or "savings_tracker.xlsx", RM or "rules_memo_transcript.txt"
     fs: dict[str, list[Fact]] = {"budget": [], "goals": [], "owned": [], "deal": []}
-    fs["budget"] += [
-        _fact("budget_balance", "budget", f"Checking balance today is ${p.balance:,.2f}.", B, "/available_balance"),
-        *[_fact(f"budget_sched_{i}", "budget", f"Scheduled: {s['payee']} ${s['amount']:,.2f} on {s['date']}.", B,
-                f"/scheduled_payments/{i}") for i, s in enumerate(p.scheduled)],
-        _fact("budget_payday", "budget", f"Next payday is {p.next_payday}.", PS, "/next_pay_date"),
-    ]
+    if "bank" in miss:
+        fs["budget"].append(_missing("budget_balance", "budget",
+                                     "No bank statement uploaded — balance and scheduled bills are unknown (treated as $0).", "bank"))
+    else:
+        fs["budget"] += [
+            _fact("budget_balance", "budget", f"Checking balance today is ${p.balance:,.2f}.", B, "/available_balance"),
+            *[_fact(f"budget_sched_{i}", "budget", f"Scheduled: {s['payee']} ${s['amount']:,.2f} on {s['date']}.", B,
+                    f"/scheduled_payments/{i}") for i, s in enumerate(p.scheduled)],
+        ]
+    if "paystub" in miss:
+        fs["budget"].append(_missing("budget_payday", "budget",
+                                     f"No pay stub uploaded — payday unknown; assuming {p.next_payday} (14 days from today).", "paystub"))
+    else:
+        fs["budget"].append(_fact("budget_payday", "budget", f"Next payday is {p.next_payday}.", PS, "/next_pay_date"))
     if p.delivery_count:
         fs["budget"].append(_fact("budget_delivery", "budget",
                                   f"{p.delivery_count} food-delivery orders this month, about ${p.avg_delivery:.0f} each.",
                                   B, "/food_delivery/0"))
-    fs["goals"] += [
-        _fact("goals_target", "goals", f"{p.goal_name} goal: ${p.japan_target:,.0f} by {p.japan_date}.", ST, "/target_amount"),
-        _fact("goals_saved", "goals", f"Saved so far: ${p.japan_saved:,.0f}; contributing ${p.japan_monthly:,.0f}/month.", ST, "/saved_so_far"),
-        *[_fact(f"goals_rule_{i}", "goals", f"My own rule (memo): \"{r}\"", RM, f"/rules/{i}") for i, r in enumerate(p.rules)],
-    ]
+    if "savings" in miss:
+        fs["goals"].append(_missing("goals_target", "goals",
+                                    "No savings tracker uploaded — there is no savings goal on file, so no goal data.", "savings"))
+    else:
+        fs["goals"] += [
+            _fact("goals_target", "goals", f"{p.goal_name} goal: ${p.japan_target:,.0f} by {p.japan_date}.", ST, "/target_amount"),
+            _fact("goals_saved", "goals", f"Saved so far: ${p.japan_saved:,.0f}; contributing ${p.japan_monthly:,.0f}/month."
+                  if p.has_goal else f"Saved so far: ${p.japan_saved:,.0f}; no monthly contribution found.", ST, "/saved_so_far"),
+        ]
+    if "rules" in miss:
+        fs["goals"].append(_missing("goals_rules_none", "goals", "No spending rules uploaded — the buyer has set no rules.", "rules"))
+    else:
+        fs["goals"] += [_fact(f"goals_rule_{i}", "goals", f"My own rule (memo): \"{r}\"", RM, f"/rules/{i}")
+                        for i, r in enumerate(p.rules)]
     if _slot_owner.get("receipts", "demo") == "demo" and p.owned_item:
         RE, PR = "receipt_email.eml", "paper_receipt.jpg"
         fs["owned"] += [
@@ -445,13 +618,14 @@ def _persist() -> None:
 
 async def load(use_cache: bool = True) -> dict:
     """Extract every active doc (yours if uploaded, else demo) in parallel (cached by file hash), then build facts."""
-    global loaded
+    global loaded, mode
+    mode = get_mode()
     _results.clear(); _errors.clear(); _paths.clear(); _slot_docs.clear(); _slot_owner.clear(); _doc_labels.clear()
     _page_cache.clear()
     jobs = []
-    for slot, docs in active_docs().items():
+    for slot, docs in active_docs(mode).items():
         _slot_docs[slot] = [k for k, _, _ in docs]
-        _slot_owner[slot] = docs[0][2] if docs else "demo"
+        _slot_owner[slot] = docs[0][2] if docs else ("missing" if mode == "mine" else "demo")
         for key, path, owner in docs:
             _paths[key] = path
             _doc_labels[key] = _label_for(slot, key, path)
@@ -476,8 +650,8 @@ def summary() -> dict:
         slots[slot] = {"label": SLOT_LABELS[slot], "owner": _slot_owner.get(slot, "demo"),
                        "files": [_paths[k].name for k in ks if k in _paths],
                        "errors": [_errors[k] for k in ks if k in _errors]}
-    return {"slots": slots, "flags": persona.flags, "errors": _errors,
-            "facts": {a: len(v) for a, v in facts.items()}, "free_cash": persona.free_cash, "name": persona.name}
+    return {"mode": get_mode(), "slots": slots, "flags": persona.flags, "errors": _errors,
+            "facts": {a: len(v) for a, v in facts.items()}, "free_cash": persona.free_cash, "name": persona.name or "You"}
 
 
 def all_facts() -> list[Fact]:

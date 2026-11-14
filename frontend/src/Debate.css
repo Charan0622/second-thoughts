@@ -1,0 +1,47 @@
+/* The live debate transcript. Identity colours come from the selves; the moderator speaks in ink. */
+.debate {
+  position: relative; z-index: 2; width: 100%;
+  background: var(--ivory); border-radius: 8px; box-shadow: inset 0 0 0 1px var(--hair-2);
+  padding: var(--s3) var(--s4); display: grid; gap: var(--s2);
+}
+.debate-title { font: 500 0.7rem/1.2 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+.debate-lines {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2);
+  max-height: 15.5rem; overflow-y: auto; padding-top: 2px; overscroll-behavior: contain; scrollbar-width: thin;
+}
+.debate-line {
+  display: grid; grid-template-columns: 9.5rem 1fr; gap: var(--s3); align-items: baseline;
+  padding-left: var(--s3); border-left: 3px solid var(--a, var(--ink));
+  animation: debate-in 0.4s var(--ease) both;
+}
+@keyframes debate-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .debate-line { animation: debate-fade 0.2s linear both; } }
+@keyframes debate-fade { from { opacity: 0; } to { opacity: 1; } }
+.debate-who { font: 600 0.78rem/1.3 var(--sans); color: var(--a, var(--ink)); }
+.debate-text { font: 400 1rem/1.4 var(--sans); color: var(--ink); }
+.debate-quote { display: block; margin-top: 2px; font: 400 0.76rem/1.35 var(--mono); color: var(--ink-3); quotes: '“' '”'; }
+.debate-line.phase-negotiate:not(.is-mod) .debate-text { font-variant-numeric: tabular-nums; }
+.debate-line.phase-veto { border-left-color: var(--wait); }
+.debate-line.phase-veto .debate-text { font-weight: 600; color: var(--wait); }
+.debate-line.is-mod {
+  border-left: 0; padding: var(--s2) 0 0; border-top: 1px solid var(--hair-2); margin-top: var(--s1);
+  grid-template-columns: 9.5rem 1fr;
+}
+.debate-line.is-mod .debate-who { color: var(--ink-2); padding-left: calc(var(--s3) + 3px); }
+.debate-line.is-mod .debate-text { font: italic 400 1.2rem/1.3 var(--serif); }
+
+@media (max-width: 999px) {
+  .debate { order: 3; }
+  .debate-line { grid-template-columns: 1fr; gap: 2px; }
+  .debate-line.is-mod { grid-template-columns: 1fr; }
+  .debate-line.is-mod .debate-who { padding-left: 0; }
+}
+@media (min-width: 1000px) {
+  .debate { width: min(580px, 40vw); }
+  .debate.is-docked {
+    position: fixed; z-index: 15; left: 50%; bottom: var(--s4); transform: translateX(-50%);
+    width: min(600px, 40vw); box-shadow: inset 0 0 0 1px var(--hair-2), 0 12px 40px rgba(28, 26, 23, 0.16);
+  }
+  .debate.is-docked .debate-lines { max-height: min(13rem, 26vh); }
+  .debate-text { font-size: 1.05rem; }
+}

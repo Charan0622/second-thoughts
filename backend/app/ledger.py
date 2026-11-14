@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .config import PRIVATE
 
-TOOLS = ("drex", "ndi", "intern", "keenable", "deepinfra", "adobe")
+TOOLS = ("drex", "ndi", "intern", "keenable", "deepinfra")  # no Adobe API access: not shown (any "adobe" record is ignored)
 # Drex bills input tokens only.
 DREX_USD_PER_TOKEN = 0.12 / 1_000_000  # Drex Max, per Nace pricing docs
 
@@ -78,5 +78,4 @@ def snapshot() -> dict:
             "input_tokens": sum(e.get("tokens", 0) for e in es) or None,
             "cost_usd": round(c, 4),
         }
-    tools["adobe"]["note"] = "Firefly avatars + Express slides (made offline)"
     return {"tools": tools, "verdicts": _verdicts, "cost_usd_est": round(cost, 4)}
