@@ -228,6 +228,15 @@ def paper_receipt() -> None:
     photo_look(img, angle=4.5, bg=(70, 72, 78)).save(OUT / "paper_receipt.jpg", quality=82)
 
 
+# ---------------------------------------------------------------- rules memo (transcript)
+def rules_transcript() -> None:
+    (OUT / "rules_memo_transcript.txt").write_text(
+        "Voice memo — transcript\n"
+        "Recorded: Sunday, November 1, 2026, 9:12 PM · Speaker: Maya Chen · Length: 0:07\n"
+        "\n"
+        "\"No gadgets over $200 before Japan. Running gear is exempt.\"\n")
+
+
 # ---------------------------------------------------------------- price tags (spike 4 / demo fallback)
 def price_tag(name: str, title: str, price: str) -> None:
     W, H = 900, 520
@@ -244,7 +253,7 @@ def price_tag(name: str, title: str, price: str) -> None:
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
     FRAMES.mkdir(parents=True, exist_ok=True)
-    bank_statement(); pay_stub(); savings_tracker(); receipt_email(); paper_receipt()
+    bank_statement(); pay_stub(); savings_tracker(); receipt_email(); paper_receipt(); rules_transcript()
     price_tag("shoes", "ASICS Gel-Nimbus 27 Running Shoes", "$109.95")
     price_tag("headphones", "Sony WH-1000XM6 Headphones", "$349.00")
     price_tag("macmini", "Apple Mac mini (M5, 16GB)", "$599.00")

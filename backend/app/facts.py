@@ -100,11 +100,11 @@ SCHEMAS: dict[str, dict] = {
     "paper_receipt.jpg": S({
         "item": {"type": "string"}, "price": {"type": "number"}, "date": {"type": "string"},
         "return_policy": {"type": "string"}, "warranty": {"type": "string", "description": "Warranty length, if printed"}}),
-    "rules_memo.m4a": S({"rules": {"type": "array", "items": {"type": "string"},
+    "rules_memo_transcript.txt": S({"rules": {"type": "array", "items": {"type": "string"},
                                    "description": "Personal spending rules the speaker states"}}),
 }
 LABELS = {"bank_statement.pdf": "Bank statement", "pay_stub.jpg": "Pay stub (photo)", "savings_tracker.xlsx": "Savings tracker",
-          "receipt_email.eml": "Receipt email", "paper_receipt.jpg": "Paper receipt (photo)", "rules_memo.m4a": "Voice memo"}
+          "receipt_email.eml": "Receipt email", "paper_receipt.jpg": "Paper receipt (photo)", "rules_memo_transcript.txt": "Rules memo (transcript)"}
 
 _results: dict[str, dict] = {}
 _errors: dict[str, str] = {}
@@ -203,7 +203,7 @@ def _build() -> None:
     global persona
     p = Persona()
     B, PS, ST, RE, PR, RM = ("bank_statement.pdf", "pay_stub.jpg", "savings_tracker.xlsx", "receipt_email.eml",
-                             "paper_receipt.jpg", "rules_memo.m4a")
+                             "paper_receipt.jpg", "rules_memo_transcript.txt")
     p.balance = _num(_val(B, "/available_balance", p.balance), p.balance)
     bank = _results.get(B, {}).get("data") or {}
     if bank.get("scheduled_payments"):
@@ -235,7 +235,7 @@ def use_persona(p: Persona, crops: bool = False) -> None:
         BASE = p
     persona = p
     B, PS, ST, RE, PR, RM = ("bank_statement.pdf", "pay_stub.jpg", "savings_tracker.xlsx", "receipt_email.eml",
-                             "paper_receipt.jpg", "rules_memo.m4a")
+                             "paper_receipt.jpg", "rules_memo_transcript.txt")
     rent = p.rent
     fs: dict[str, list[Fact]] = {"budget": [], "goals": [], "owned": [], "deal": []}
     fs["budget"] += [
@@ -249,11 +249,11 @@ def use_persona(p: Persona, crops: bool = False) -> None:
     fs["goals"] += [
         _fact("goals_target", "goals", f"Japan trip goal: ${p.japan_target:,.0f} by {p.japan_date}.", ST, "/target_amount"),
         _fact("goals_saved", "goals", f"Saved so far: ${p.japan_saved:,.0f}; contributing ${p.japan_monthly:,.0f}/month.", ST, "/saved_so_far"),
-        *[_fact(f"goals_rule_{i}", "goals", f"My own rule (voice memo): \"{r}\"", RM, f"/rules/{i}") for i, r in enumerate(p.rules)],
+        *[_fact(f"goals_rule_{i}", "goals", f"My own rule (memo): \"{r}\"", RM, f"/rules/{i}") for i, r in enumerate(p.rules)],
     ]
     for f in fs["goals"]:
         if f.doc == RM and f.status == "fallback":
-            f.doc_label = "Voice memo (transcript)"
+            f.doc_label = "Rules memo (transcript)"
     fs["owned"] += [
         _fact("owned_item", "owned", f"Already own: {p.owned_item}, bought {p.owned_date} for ${p.owned_price:.0f}.", RE, "/item"),
         _fact("owned_return", "owned", f"Earbuds: {p.owned_return}.", RE, "/return_policy"),

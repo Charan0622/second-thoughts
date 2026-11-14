@@ -9,7 +9,7 @@ Built at **Drexathon 2026** · Track 2: **Swarm Intelligence** (Drex makes every
 | Self | Grounded in | Asks |
 |---|---|---|
 | 💳 **Budget You** | Bank statement (PDF), pay stub (photo) | Can I afford this before payday once the scheduled bills are paid? **Holds a veto.** |
-| 🗾 **Goals You** | Savings tracker (XLSX), voice memo with my own rules | Does it delay my goal or break my own rule? |
+| 🗾 **Goals You** | Savings tracker (XLSX), transcript of my own spending rules (TXT) | Does it delay my goal or break my own rule? |
 | 🧾 **Already-Own-It You** | Receipt email (EML), paper receipt (photo) | Do I already own something like this? |
 | 🏷️ **Deal You** | Live web via Keenable | Is this a good price, or will waiting (Black Friday) win? |
 
@@ -26,7 +26,7 @@ Built at **Drexathon 2026** · Track 2: **Swarm Intelligence** (Drex makes every
 ```mermaid
 flowchart LR
   subgraph Setup["Setup (once, cached)"]
-    D[Persona docs<br/>PDF · JPG · XLSX · EML · M4A] -->|NDI extract<br/>+ citations| F[(Fact store<br/>values · page · bbox · quote)]
+    D[Persona docs<br/>PDF · JPG · XLSX · EML · TXT] -->|NDI extract<br/>+ citations| F[(Fact store<br/>values · page · bbox · quote)]
     F --> C[Citation crops<br/>highlighted line]
     I[Intern · the Clerk] -->|headless| S[Facts summary]
     K[Keenable] -->|live prices| W[(Deal cache)]
@@ -84,7 +84,7 @@ flowchart LR
 | Tool | Where it's used |
 |---|---|
 | **Drex** (System One) | Perceive (Drex Max, image), all 4 votes, the veto, the citation choice, the negotiation scoring. That's 5–9 calls per verdict at about 350 ms median |
-| **NDI** | Extracts all persona documents (PDF, photos, XLSX, EML, audio) with page/bbox citations, which become the highlighted crops; reads the price tag from the camera frame |
+| **NDI** | Extracts all 6 persona documents (PDF, 2 photos, XLSX, EML, TXT) with page/bbox citations, which become the highlighted crops; reads the price tag from the camera frame |
 | **Intern** | **In the product:** the Clerk, run headless (`intern -p --json`). It writes the persona facts summary at setup ([`docs/clerk_summary.md`](docs/clerk_summary.md)) and explains split verdicts in ~4 s. **As a coding agent:** given `AGENTS.md` as its spec, it wrote [`backend/tests/test_council_math.py`](backend/tests/test_council_math.py) (12 tests of the pooling, bands and trade-offs; 8 turns, 17 Drex System 1 decisions) |
 | **Keenable** | Live web prices and Black Friday signals for Deal You, cached per query |
 | **DeepInfra** | Qwen writes the spoken verdict sentence; Qwen3.8-Max is the frontier baseline in the benchmark |

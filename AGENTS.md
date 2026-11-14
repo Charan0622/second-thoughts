@@ -59,7 +59,7 @@ frontend/src/
 | Agent | Facts from | Question it answers |
 |---|---|---|
 | `budget` | bank_statement.pdf, pay_stub.jpg | Can I afford this before payday once the scheduled bills are paid? **Holds a veto.** |
-| `goals` | savings_tracker.xlsx, rules memo (audio → transcript) | Does this delay the Japan goal or break one of my own rules? |
+| `goals` | savings_tracker.xlsx, rules_memo_transcript.txt | Does this delay the Japan goal or break one of my own rules? |
 | `owned` | receipt_email.eml, paper_receipt.jpg | Do I already own something like this? |
 | `deal` | Keenable live search | Is this a good price now, or will waiting (Black Friday, Nov 27) win? |
 

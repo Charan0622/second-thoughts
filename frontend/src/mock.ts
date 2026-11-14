@@ -47,7 +47,7 @@ const LABELS: Record<AgentId, string> = {
 type VoteSpec = Omit<VoteEvent, 'type' | 'label' | 'ms' | 'model' | 'stance'>
 
 const BANK = { doc: 'bank_statement.pdf', doc_label: 'Bank statement', page: 1 }
-const MEMO = { doc: 'rules_memo.m4a', doc_label: 'Voice memo · rules', page: null }
+const MEMO = { doc: 'rules_memo_transcript.txt', doc_label: 'Rules memo (transcript)', page: null }
 const KEEN = { doc: 'keenable:search', doc_label: 'Keenable live search', page: null }
 
 interface Scenario {
