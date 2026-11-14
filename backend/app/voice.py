@@ -33,8 +33,9 @@ async def sentence(verdict: dict, votes: dict) -> dict:
               f"Her spending council decided: {verdict['title']}"
               + (f" (condition: {verdict['condition']})" if verdict.get("condition") else "")
               + ". Votes:\n" + "\n".join(lines)
-              + "\n\nWrite ONE warm, plain-English sentence (max 30 words) speaking directly to Maya that explains the verdict. "
-                "Use only the facts above. No preamble, no quotes.")
+              + f"\n\nThere are exactly {len(votes)} selves; if you mention them, use their names exactly as written above. "
+                "Write ONE warm, plain-English sentence (max 30 words) speaking directly to Maya that explains the verdict. "
+                "Use only the facts above; do not invent numbers or voices. No preamble, no quotes.")
     t = time.perf_counter()
     ok = False
     try:
