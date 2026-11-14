@@ -295,12 +295,6 @@ export default function App() {
             onConfirm={(price, name) => { setConfirmEv(null); const r = lastReqRef.current; if (r) void run({ ...r, price, item_name: name }) }} />
           <nav className="hdr-actions" aria-label="Actions">
           <button type="button" className="dcp-btn" onClick={() => {
-            if (needsChoice) { toast('Choose your documents or the demo persona first'); return }
-            abortRef.current?.abort(); dispatch({ kind: 'clear' }); setClarity(false)
-            window.scrollTo({ top: 0, behavior: 'smooth' })
-            setTimeout(() => (document.querySelector('input[type=file][accept="image/*"]') as HTMLInputElement | null)?.click(), 50)
-          }}>📷 Check something</button>
-          <button type="button" className="dcp-btn" onClick={() => {
             abortRef.current?.abort(); dispatch({ kind: 'clear' }); setClarity(false); setConfirmEv(null)
             window.scrollTo({ top: 0, behavior: 'smooth' })
           }}>↺ Start over</button>
@@ -308,9 +302,6 @@ export default function App() {
           <DocsPanel openSignal={docsOpen} onChange={refreshPersona} />
           <PhoneLink ready={!needsChoice} runId={state.runId} onFrame={(frame, price) => run({ demo_item: null, frame, price: price ?? parsedPrice, item_name: null })} />
           </nav>
-          <span className={`source ${mock ? 'source-mock' : 'source-live'}`} title={mock ? 'Backend not reachable: replaying recorded fixture events' : 'Connected to the live backend'}>
-            {mock ? 'Mock fixtures' : 'Live'}
-          </span>
         </header>
 
         <main className="arena" data-act={stage}>
