@@ -36,6 +36,7 @@ async def sentence(verdict: dict, votes: dict) -> dict:
               + (f" (condition: {verdict['condition']})" if verdict.get("condition") else "")
               + ". Votes:\n" + "\n".join(lines)
               + f"\n\nThere are exactly {len(votes)} selves; if you mention them, use their names exactly as written above. "
+                f"The FINAL decision is: {verdict['title']}. Your sentence MUST recommend exactly that final decision (the votes above are the first round, before any compromise). "
                 f"Write ONE warm, plain-English sentence (max 30 words) speaking directly to {n} that explains the verdict. "
                 "Use only the facts above; do not invent numbers or voices. No preamble, no quotes.")
     t = time.perf_counter()

@@ -11,7 +11,7 @@ from typing import Any, AsyncIterator
 
 from PIL import Image
 
-from . import drex, facts as F, ledger, ndi, tradeoffs, vision, voice
+from . import drex, facts as F, keenable_client, ledger, ndi, tradeoffs, vision, voice
 from .agents import budget, deal, goals, owned
 from .agents.base import REGRET_Q, Item, Vote
 from .config import BAND_HIGH, BAND_LOW, FRAMES, VETO_THRESHOLD
@@ -78,6 +78,58 @@ def price_terms(item: Item) -> dict:
 
 
 # ---------------------------------------------------------------- perceive
+try:  # iPhone / macOS photos and screenshots are often HEIC
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except Exception:  # noqa: BLE001
+    pass
+
+
+class ConfirmPrice(Exception):
+    """No price visible, but we identified the product and found its price online: ask the user to confirm."""
+    def __init__(self, payload: dict):
+        super().__init__("confirm price")
+        self.payload = payload
+
+
+async def web_price(name: str) -> dict | None:
+    """Look the product up on the live web (Keenable) → typical price + sources. Never invents: None if unclear."""
+    from .agents import deal as _deal
+    try:
+        r = await asyncio.wait_for(keenable_client.search(f"{name} price buy", None, timeout=4.0), 5.0)
+    except Exception:  # noqa: BLE001
+        return None
+    if not r:
+        return None
+    toks = _deal._tokens(name)
+    need = 1 if len(toks) <= 1 else 2
+    found = []
+    finance = ("robinhood", "marketbeat", "nasdaq", "nyse", "stock", "finance", "investing", "seekingalpha", "fool.com", "macrotrends")
+    for res in r.get("results") or []:
+        if any(f in (res.get("host") or "").lower() or f in res["title"].lower() for f in finance):
+            continue  # a brand name alone pulls in share prices — never a product price
+        if len(toks & _deal._tokens(res["title"])) < need:
+            continue
+        for p in keenable_client.prices_near(res["title"] + " " + res["snippet"], None):
+            if 1 <= p <= 20000:
+                found.append((p, res.get("host") or "web"))
+    if not found:
+        return None
+    ps = sorted(p for p, _ in found)
+    med = ps[len(ps) // 2]
+    keep = [(p, h) for p, h in found if 0.6 * med <= p <= 1.6 * med]
+    if not keep:
+        return None
+    kp = sorted(p for p, _ in keep)
+    typical = kp[len(kp) // 2]
+    seen_hosts, sources = set(), []
+    for p, h in sorted(keep, key=lambda x: abs(x[0] - typical)):
+        if h not in seen_hosts:
+            seen_hosts.add(h)
+            sources.append({"host": h, "price": p})
+    return {"suggested_price": round(typical, 2), "sources": sources[:4], "n": len(kp), "query": f"{name} price"}
+
+
 def _jpeg_data_url(raw: bytes, max_side: int = 1024) -> tuple[str, bytes]:
     im = Image.open(io.BytesIO(raw)).convert("RGB")
     im.thumbnail((max_side, max_side))
@@ -199,7 +251,13 @@ async def perceive(req: dict) -> dict:
     async def nothing():
         return {}
     # Demo frames have a known price, so skip the ~4 s vision read; live photos use all three readers in parallel.
-    look_a, tag, seen = await asyncio.gather(look(), read_tag(), nothing() if demo else vision.read_tag(data_url))
+    ndi_task = asyncio.create_task(read_tag())
+    look_a, seen = await asyncio.gather(look(), nothing() if demo else vision.read_tag(data_url))
+    confident = bool(seen and seen.get("price") and float(seen.get("confidence") or 0) >= 0.6 and seen.get("product_name"))
+    try:   # NDI is the slowest reader; once vision has a confident read, give it only a moment longer
+        tag = await asyncio.wait_for(asyncio.shield(ndi_task), 1.0 if confident or demo else 6.0)
+    except asyncio.TimeoutError:
+        tag = {}
     if look_a is None:
         cat, cat_p, bucket, present, tag_vis = (demo or {}).get("category", "other"), 0.0, "none", 1.0, 0.0
     else:
@@ -209,10 +267,23 @@ async def perceive(req: dict) -> dict:
     if not demo and present < 0.5 and manual is None:
         raise NeedsInput("I can't see a product in that photo — point the camera at the item (and its price tag)")
 
-    price, src, note = resolve_price(manual, tag, seen, bucket, cache=demo["price"] if demo else None)
-
     tag_name = (tag.get("product_name") or "").strip()
     seen_name = vision.display_name(seen) if seen else ""
+    try:
+        price, src, note = resolve_price(manual, tag, seen, bucket, cache=demo["price"] if demo else None)
+    except NeedsInput:
+        guess_name = req.get("item_name") or (tag_name if len(tag_name) >= 3 else "") or (seen_name if len(seen_name) >= 3 else "")
+        if not guess_name:
+            raise NeedsInput("I couldn't identify the product or read a price — type the price (and name) and ask again") from None
+        from .agents.deal import _tokens
+        if len(_tokens(guess_name)) < 2:   # only a brand is visible: search "<brand> <what it is>"
+            kind = (seen or {}).get("product_type") or cat.replace("_", " ")
+            guess_name = f"{guess_name.title()} {kind}".strip()
+        wp = await web_price(guess_name)
+        raise ConfirmPrice({"type": "confirm_price", "item_name": guess_name, "category": cat,
+                            "suggested_price": (wp or {}).get("suggested_price"), "sources": (wp or {}).get("sources", []),
+                            "message": (f"No price in the photo. Online, {guess_name} is about ${wp['suggested_price']:,.2f}. Is that what you'd pay?"
+                                        if wp else f"No price in the photo, and I couldn't find a reliable one online for {guess_name}. What does it cost?")}) from None
     if req.get("item_name"):
         name, name_src = req["item_name"], "manual"
     elif tag_name and len(tag_name) >= 3:
@@ -301,6 +372,9 @@ async def run(req: dict) -> AsyncIterator[dict]:
     yield {"type": "perceive_start"}
     try:
         per = await perceive(req)
+    except ConfirmPrice as c:
+        yield c.payload
+        return
     except NeedsInput as e:
         yield {"type": "error", "message": str(e), "needs_input": True}
         return
