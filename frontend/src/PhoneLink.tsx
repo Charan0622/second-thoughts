@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 interface Props {
+  /** False until a persona (your documents or the demo) is chosen; photos can't be judged before that. */
+  ready?: boolean
   onFrame: (dataUrl: string, price: number | null) => void
   /** App's run counter; the phone photo stays in the camera frame only for the run it started. */
   runId: number
@@ -16,6 +18,8 @@ interface Latest { id: number; frame: string | null; price?: number | null; ts?:
 const KEEP_POLLING_MS = 10 * 60 * 1000
 
 const CSS = `
+.phl-warn { font-size: 0.85rem; padding: 10px 12px; border-radius: 6px; background: rgba(200,140,0,.14); color: var(--ink); }
+.toasts { z-index: 1100 !important; }
 .phl-btn { align-self: center; justify-self: start; width: auto; flex: 0 0 auto; font: 500 0.78rem/1 var(--sans); padding: 7px 12px; border-radius: 999px;
   border: 1px solid var(--hair-2); background: transparent; color: var(--ink-2); white-space: nowrap; }
 .phl-btn:hover { border-color: var(--ink); color: var(--ink); }
@@ -35,7 +39,7 @@ const CSS = `
 .phl-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 `
 
-export default function PhoneLink({ onFrame, runId }: Props) {
+export default function PhoneLink({ onFrame, runId, ready = true }: Props) {
   const [open, setOpen] = useState(false)
   const [info, setInfo] = useState<Info | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -48,6 +52,9 @@ export default function PhoneLink({ onFrame, runId }: Props) {
   onFrameRef.current = onFrame
   const runIdRef = useRef(runId)
   runIdRef.current = runId
+  const readyRef = useRef(ready)
+  readyRef.current = ready
+  const [blocked, setBlocked] = useState(false)
 
   const polling = open || (lastFrameAt > 0 && now - lastFrameAt < KEEP_POLLING_MS)
 
@@ -77,6 +84,8 @@ export default function PhoneLink({ onFrame, runId }: Props) {
         if (lastId.current === null) { lastId.current = d.id; return } // skip frames sent before we looked
         if (d.frame && d.id > lastId.current) {
           lastId.current = d.id
+          if (!readyRef.current) { setBlocked(true); return }   // keep the overlay open and say why
+          setBlocked(false)
           setReceived(true)
           setLastFrameAt(Date.now())
           setShown({ src: d.frame, runId: runIdRef.current + 1 })
@@ -123,10 +132,13 @@ export default function PhoneLink({ onFrame, runId }: Props) {
             ) : (
               <div className="phl-status">Loading…</div>
             )}
-            {!error && (
+            {!ready && (
+              <div className="phl-warn">{blocked ? 'Photo received — but no persona is chosen yet. ' : ''}Close this, choose <b>Upload your documents</b> or <b>Try the demo persona</b>, then send the photo again.</div>
+            )}
+            {!error && ready && (
               <div className="phl-status">{received ? 'Photo received — asking your selves' : 'Waiting for a photo…'}</div>
             )}
-            <div className="phl-hint">Phone and laptop on the same Wi-Fi. Scan, take a photo, look up.</div>
+            <div className="phl-hint">{info?.url?.startsWith('https://') ? 'Works from any phone on any network: scan, take a photo, look up.' : 'Phone and laptop on the same Wi-Fi. Scan, take a photo, look up.'}</div>
           </div>
         </div>,
         document.body,

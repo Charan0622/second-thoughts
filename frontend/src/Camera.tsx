@@ -88,7 +88,11 @@ export default function Camera(p: Props) {
         } catch { /* labels unavailable */ }
         if (videoRef.current) { videoRef.current.srcObject = s; void videoRef.current.play() }
       })
-      .catch((e: unknown) => setCamError(e instanceof Error ? e.message : 'Camera unavailable'))
+      .catch((e: unknown) => {
+        // A remembered camera (e.g. an iPhone that's no longer nearby) can't open: fall back to the default camera.
+        if (camId) { try { localStorage.removeItem('st-cam') } catch { /* ignore */ } setCamId(''); return }
+        setCamError(e instanceof Error ? e.message : 'Camera unavailable')
+      })
     return () => { cancelled = true; stream?.getTracks().forEach((t) => t.stop()) }
   }, [p.demoMode, camId])
 
