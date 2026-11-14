@@ -20,10 +20,10 @@ const CSS = `
   border: 1px solid var(--hair-2); background: transparent; color: var(--ink-2); white-space: nowrap; }
 .phl-btn:hover { border-color: var(--ink); color: var(--ink); }
 .phl-btn.is-live { border-color: var(--buy); color: var(--buy); }
-.phl-scrim { position: fixed; inset: 0; z-index: 60; background: rgba(22, 20, 15, 0.55); display: grid; place-items: center; padding: var(--gutter); }
-.phl-card { background: var(--paper); color: var(--ink); border-radius: 10px; padding: var(--s5); width: min(380px, 100%);
-  display: grid; gap: var(--s3); box-shadow: 0 20px 60px rgba(0,0,0,.35); font-family: var(--sans); }
-.phl-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); }
+.phl-scrim { position: fixed; inset: 0; z-index: 1000; background: rgba(22, 20, 15, 0.55); display: grid; place-items: center; padding: var(--gutter); }
+.phl-card { background: var(--ivory, #f4efe4); color: var(--ink); border-radius: 10px; padding: var(--s5, 30px); width: min(380px, 100%);
+  display: grid; gap: var(--s3, 18px); box-shadow: 0 20px 60px rgba(0,0,0,.35); font-family: var(--sans); }
+.phl-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3, 18px); }
 .phl-title { font: 400 1.5rem/1.1 var(--serif); }
 .phl-x { background: none; border: 0; font-size: 1.3rem; line-height: 1; color: var(--ink-2); padding: 4px; }
 .phl-qr { width: 100%; aspect-ratio: 1; background: #fff; border-radius: 6px; display: grid; place-items: center; overflow: hidden; }
