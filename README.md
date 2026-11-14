@@ -62,24 +62,33 @@ flowchart LR
 
 **Language models only write prose.** DeepInfra (Qwen) writes the one spoken sentence, and Intern writes the Clerk's explanation. Neither makes a decision.
 
-## Results
+## Results (honest version)
 
-**Being rerun on the current code. Earlier numbers are withdrawn.**
+We benchmarked the council against simpler deciders that get **exactly the same facts and code-computed numbers**. Full details, confusion matrices and caveats are in [`backend/bench/RESULTS.md`](backend/bench/RESULTS.md).
 
-An internal adversarial review of our first benchmark (40 cards, written and labelled by us) found that it overstated the council's advantage:
-- Every "wait" label reduced to *price > free cash*, which any method gets right from the shared facts. A few lines of plain code scored 35/40.
-- The single-call baselines weren't given the band definitions the council effectively uses. With a fitted cut-off, a single Drex call matched the council.
-- The jump from 70% to 90% came from one change aimed at specific cards.
-- Costs were mis-attributed because the methods ran concurrently.
+**24 hold-out cards, labelled blind** before the current agent code was read. They include "wait" cases that aren't about bills.
 
-The rebuilt benchmark adds:
-- 24 hold-out cards labelled blind, including "wait" cases that aren't about bills
-- fairer baselines
-- a plain-rules floor
-- bootstrap confidence intervals and the subset where cards are *not* decided by price vs. free cash
-- per-method cost, measured with the methods run one after another
+| Method | Accuracy (95% CI) | Cost / verdict | Latency |
+|---|---|---|---|
+| **Drex council (ours)** | **75%** (58–92) | **$0.0005** | **0.47 s** |
+| Frontier-LLM council (4× Qwen3.8-Max, same pooling, no negotiation) | 75% (54–92) | ~4× ours | ~4× ours |
+| Single Drex call, given the band definitions | 71% (50–88) | | |
+| Single Qwen3.8-Max call, given the band definitions | 67% (46–83) | | |
+| Rules floor (3 lines of Python) | 67% (46–83) | | |
 
-Results go in [`backend/bench/RESULTS.md`](backend/bench/RESULTS.md).
+**What this shows:**
+- The council **matches a frontier-LLM council at about a quarter of the cost and latency**.
+- It made **0 false alarms**: it never said Wait when the label was Buy.
+- It is the **most robust to wording**. With giveaway words like "OVER" and "EXCEEDS" removed from the facts, the council loses one card (71%), while the other model baselines fall to 58%.
+- Every vote is grounded in a citation that Drex picked.
+
+**What it doesn't show:**
+- The council's lead over the simpler methods is **not statistically significant** at n=24.
+- It is **weak on "wait" cases that aren't about bills**: it caught 2 of 6. Negotiation tends to turn them into "buy with a condition".
+- When a single self is near-certain and outvoted by the others, it can be overruled, because each self's weight is capped. That's a known design issue.
+- On our original 40-card development set the council scores 92% against 88% for the rules floor. We iterated on that set, so we don't count it as evidence.
+
+How we got here: our first benchmark claimed 90%. An internal adversarial review showed the labels mostly reduced to "price > free cash", the baselines were too weak, and one change had been tuned to specific cards. We withdrew that claim and rebuilt the benchmark as above.
 
 ## Tool usage
 

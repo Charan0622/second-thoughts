@@ -22,8 +22,8 @@
   - Veto at p ≥ 0.93 · log-odds pooling · negotiation where every self scores every trade-off
 
 **4 · Numbers**
-- Benchmark table: use the hold-out numbers from backend/bench/RESULTS.md (blind-labelled cards, CIs, plain-rules floor). Say what it does and doesn't show.
-- Latency: council ~0.4–0.7 s vs ~2 s for the frontier LLM. Cost: ~$0.0006 per verdict (vs $0.0024 for the Qwen council).
+- Hold-out (24 blind cards): council 75%, the same as a Qwen3.8-Max council but at about a quarter of the cost and latency; 0 false alarms; most robust when giveaway words are removed (71% vs 58%). Its lead over simpler methods isn't significant at n=24, and say so.
+- Latency and cost: ~0.47 s and $0.0005 per verdict.
 - Honesty slide: our own review tore the first benchmark apart; show what we changed.
 
 **5 · Tool usage**
