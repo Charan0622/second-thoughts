@@ -76,7 +76,8 @@ export default function Camera(p: Props) {
   const [camError, setCamError] = useState<string | null>(null)
   // Camera picker: lets an iPhone (macOS Continuity Camera) or any USB/virtual camera be the eye.
   const [, setCams] = useState<MediaDeviceInfo[]>([])
-  const [camId, setCamId] = useState<string>(() => { try { return localStorage.getItem('st-cam') ?? '' } catch { return '' } })
+  // Always the default camera. (A remembered or auto-picked iPhone camera could loop between devices and leave the frame blank.)
+  const [camId, setCamId] = useState<string>(() => { try { localStorage.removeItem('st-cam') } catch { /* ignore */ } return '' })
   const [still, setStill] = useState<string | null>(null)
 
   useEffect(() => {
@@ -91,8 +92,6 @@ export default function Camera(p: Props) {
         try {
           const list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput')
           setCams(list)
-          const iphone = list.find((d) => /iphone|continuity/i.test(d.label))
-          if (!camId && iphone && iphone.deviceId !== s.getVideoTracks()[0]?.getSettings().deviceId) { setCamId(iphone.deviceId); return }
         } catch { /* labels unavailable */ }
         if (videoRef.current) { videoRef.current.srcObject = s; void videoRef.current.play() }
       })
