@@ -128,7 +128,8 @@ export default function Camera(p: Props) {
 
   const item = p.items.find((i) => i.id === p.selected)
   const scanning = p.phase === 'perceiving'
-  const showStill = !p.demoMode && still && p.phase !== 'idle'
+  // Keep your photo on screen (through price questions, errors and the verdict) until you choose Retake.
+  const showStill = !p.demoMode && !!still
 
   // What we know about the item: the perceived reading once it lands, otherwise the demo item's tag.
   const name = p.perceive?.item_name ?? (p.demoMode ? item?.name : undefined)
@@ -143,7 +144,14 @@ export default function Camera(p: Props) {
           {p.demoMode ? (
             item && <img key={item.id} className="frame" src={item.frame_url} alt={item.name} />
           ) : showStill ? (
-            <img className="frame" src={still!} alt="Captured frame" />
+            <>
+              <img className="frame" src={still!} alt="Your photo" />
+              <button type="button" onClick={() => setStill(null)} disabled={p.busy}
+                style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, font: '500 0.8rem/1 var(--sans)', padding: '7px 11px',
+                  borderRadius: 999, border: '1px solid var(--hair-2)', background: 'var(--ivory, #f4efe4)', color: 'var(--ink)', cursor: 'pointer' }}>
+                ↺ Retake
+              </button>
+            </>
           ) : camError ? (
             <div className="cam-error">Camera unavailable: {camError}. Upload a photo instead.</div>
           ) : null}
