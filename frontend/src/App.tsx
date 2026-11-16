@@ -371,7 +371,8 @@ function PersonaLine({ persona, mode }: { persona: Persona | null; mode: Persona
   const hasGoal = persona.has_goal ?? persona.japan.target > 0
   const pct = hasGoal ? Math.min(1, persona.japan.saved / persona.japan.target) : 0
   const payday = new Date(persona.next_payday + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  const goal = persona.goal_short ? `${persona.goal_short.charAt(0).toUpperCase()}${persona.goal_short.slice(1)} fund` : 'Japan fund'
+  const gs = persona.goal_short ? `${persona.goal_short.charAt(0).toUpperCase()}${persona.goal_short.slice(1)}` : 'Japan'
+  const goal = /\b(fund|savings|payment)$/i.test(gs) ? gs : `${gs} fund`
   return (
     <dl className="persona" aria-label={`${persona.name}'s situation`}>
       <div className="persona-who"><dt className="sr">Person</dt><dd>{persona.name}{mode === 'mine' ? <span> · your documents</span> : null}</dd></div>

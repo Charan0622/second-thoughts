@@ -3,6 +3,8 @@ import { motion } from 'framer-motion'
 import { AGENTS, type AgentId, type Citation, type Persona, type Pick, type VetoEvent, type VoteEvent } from './api'
 import type { RunState } from './App'
 
+const goalLabel = (g?: string) => { const n = g ?? 'Japan'; return /\b(fund|savings|payment)$/i.test(n) ? n : `${n} fund` }
+
 export const AGENT_META: Record<AgentId, { label: string; short: string; question: string; reads: string }> = {
   budget: { label: 'The Accountant', short: 'Budget', question: 'Can I afford it?', reads: 'bank statement and pay stub' },
   goals: { label: 'The Planner', short: 'Goals', question: 'What does it cost my future?', reads: 'savings goal and your rules' },
@@ -171,9 +173,9 @@ function Viz({ agent, vote, state, persona }: { agent: AgentId; vote: VoteEvent;
     if (!persona) return null
     const pct = Math.min(1, persona.japan.saved / persona.japan.target)
     return (
-      <span className="viz viz-goals" aria-label={`${persona.goal_short ?? 'Japan'} fund ${persona.japan.saved} of ${persona.japan.target}`}>
+      <span className="viz viz-goals" aria-label={`${goalLabel(persona.goal_short)} ${persona.japan.saved} of ${persona.japan.target}`}>
         <span className="timeline"><span className="timeline-fill" style={{ width: `${pct * 100}%` }} /><span className="timeline-dot" style={{ left: `${pct * 100}%` }} /></span>
-        <span className="timeline-label">{persona.goal_short ?? 'Japan'} fund ${persona.japan.saved.toLocaleString('en-US')} / ${persona.japan.target.toLocaleString('en-US')}{slip != null ? <b> · slips {slip} days</b> : null}</span>
+        <span className="timeline-label">{goalLabel(persona.goal_short)} ${persona.japan.saved.toLocaleString('en-US')} / ${persona.japan.target.toLocaleString('en-US')}{slip != null ? <b> · slips {slip} days</b> : null}</span>
       </span>
     )
   }
